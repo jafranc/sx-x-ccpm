@@ -1,0 +1,9 @@
+[submodule "tpl/cxxopts"]
+	path = tpl/cxxopts
+	url = https://github.com/jarro2783/cxxopts
+[submodule "tpl/cgal"]
+	path = tpl/cgal
+	url = https://github.com/CGAL/cgal
+[submodule "tpl/CImg"]
+	path = tpl/CImg
+	url = https://github.com/dtschump/CImg
