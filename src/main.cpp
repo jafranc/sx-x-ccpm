@@ -38,30 +38,36 @@ int main(int argc, const char **argv) {
 
     auto options_parsed = options.parse(argc, argv);
     //create the repo
-    boost::filesystem::path output_dir = boost::filesystem::path(options_parsed["output"].as<std::string>());
-    boost::filesystem::create_directory(output_dir);
-    //req. interfaces
-    ccpm::interface<ccpm::itf_to_CImg<float, float>> Itf;
-    ccpm::interface<ccpm::itf_to_CGAL> Itf2;
     //help print
     if (options_parsed["help"].count()) {
         std::cout << options.help() << std::endl;
         exit(0);
     }
+    else if(options_parsed.count("output")>0) {
+        boost::filesystem::path output_dir = boost::filesystem::path(options_parsed["output"].as<std::string>());
+        boost::filesystem::create_directory(output_dir);
 
-    string prefix, base,  ext;
-    std::cout << "image file " << options_parsed["image"].as<std::string>() << std::endl;
-    Itf.set_input(options_parsed["image"].as<std::string>().c_str());
-    auto names = split_name(options_parsed["image"].as<std::string>().c_str());
-          Itf.get_output().save_inr("from-image.inr");
-          Itf2.set_input("from-image.inr");
-    Itf2.set_refined();
-    Itf2.set_ARD(
-            options_parsed["ard"].as<std::vector<double>>()[0],
-            options_parsed["ard"].as<std::vector<double>>()[1],
-            options_parsed["ard"].as<std::vector<double>>()[2]);
+        //req. interfaces
+        ccpm::interface<ccpm::itf_to_CImg<float, float>> Itf;
+        ccpm::interface<ccpm::itf_to_CGAL> Itf2;
 
-    Itf2.save_surf_stl(boost::filesystem::path(output_dir / ( std::get<1>(names) + (".stl"))).c_str());
+        string prefix, base,  ext;
+        std::cout << "image file " << options_parsed["image"].as<std::string>() << std::endl;
+        Itf.set_input(options_parsed["image"].as<std::string>().c_str());
+        auto names = split_name(options_parsed["image"].as<std::string>().c_str());
+        Itf.get_output().save_inr("from-image.inr");
+        Itf2.set_input("from-image.inr");
+        Itf2.set_refined();
+        Itf2.set_ARD(
+                options_parsed["ard"].as<std::vector<double>>()[0],
+                options_parsed["ard"].as<std::vector<double>>()[1],
+                options_parsed["ard"].as<std::vector<double>>()[2]);
+
+        Itf2.save_surf_stl(boost::filesystem::path(output_dir / ( std::get<1>(names) + (".stl"))).c_str());
+    }
+    else
+        throw std::invalid_argument("Output directory required");
+
 
 
     return 0;
