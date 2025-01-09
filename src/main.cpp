@@ -30,6 +30,7 @@ int main(int argc, const char **argv) {
                     ("d,debug", "Enable various level of verbosity and debug",
                      cxxopts::value<int>()->default_value("0"))
                     ("i,image", "image file name", cxxopts::value<std::string>())
+                    ("t,test", "testing", cxxopts::value<std::string>())
                     ("ard", "surface mesh definition",
                      cxxopts::value<std::vector<double>>()->default_value("30.,2.,1."))
                     ("o,output", "output repository", cxxopts::value<std::string>())
@@ -49,12 +50,21 @@ int main(int argc, const char **argv) {
 
         //req. interfaces
         ccpm::interface<ccpm::itf_to_CImg<float, float>> Itf;
-        ccpm::interface<ccpm::itf_to_CGAL> Itf2;
-
         string prefix, base,  ext;
         std::cout << "image file " << options_parsed["image"].as<std::string>() << std::endl;
         Itf.set_input(options_parsed["image"].as<std::string>().c_str());
         auto names = split_name(options_parsed["image"].as<std::string>().c_str());
+
+        if (options_parsed.count("test")>0){
+
+            Itf.to_mlOtsu(3, output_dir.string() + ("/otsu_"));
+            return 0;
+        }
+
+
+        ccpm::interface<ccpm::itf_to_CGAL> Itf2;
+
+
         Itf.get_output().save_inr("from-image.inr");
         Itf2.set_input("from-image.inr");
         Itf2.set_refined();
