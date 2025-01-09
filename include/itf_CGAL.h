@@ -87,7 +87,7 @@ namespace ccpm {
         typedef Triangle_mesh::Property_map <vertex_descriptor, std::vector<double>> Curvature_PM_type;
         //for local refinement
         //TODO look at what was there and what/why we extracted from
-//    typedef T_PolyhedralSurf_rings<Triangle_mesh, Vertex_PM_type > Poly_rings;
+//    typedef T_PolyhedralSurf_rings<Triangle_mesh, Vertex_PM_type > Poly_rings
         typedef Poly_rings <Triangle_mesh, Vertex_PM_type> Poly_rings_def;
 
         struct refinement_parameters {
@@ -97,7 +97,7 @@ namespace ccpm {
             // default parameter values and global variables
             unsigned int d_fitting = 2;
             unsigned int d_monge = 2;
-            unsigned int nb_rings = 10;//seek min # of rings to get the required #pts
+            unsigned int nb_rings = 100;//seek min # of rings to get the required #pts
             unsigned int nb_points_to_use = 100;//
             bool verbose = (dbg_lvl > 2);
             unsigned int min_nb_points = (d_fitting + 1) * (d_fitting + 2) / 2;
@@ -206,7 +206,7 @@ namespace ccpm {
                 read_off(off_fname.c_str());
                 auto cpm = process_refined();
 
-                std::ofstream out(fname), csvfile(prefix + (".csv"));
+                std::ofstream out(fname, std::ios::binary), csvfile(prefix + (".csv"));
                 CGAL::IO::write_STL(out, tmesh_);
 
                 csvfile << "# x, y, z, k1, k2" << std::endl;
@@ -271,7 +271,7 @@ namespace ccpm {
 
                 //Note : could it be other object than a sphere ?
                 // the sphere actually bounds the whole image.
-                GT::Point_3 bounding_sphere_center(71., 71., 225.0);
+                GT::Point_3 bounding_sphere_center(71., 71., 225.0); //TODO find defaulted or use input
                 GT::FT bounding_sphere_squared_radius = 225.0 * 225.0 * 2.;
                 GT::Sphere_3 bounding_sphere(bounding_sphere_center,
                                              bounding_sphere_squared_radius);
@@ -292,11 +292,25 @@ namespace ccpm {
 
                 // meshing surface, with the "manifold without boundary" algorithm
                 //the output mesh is guaranteed to be a manifold surface without boundary
-                CGAL::make_surface_mesh(c2t3_, surface, criteria, CGAL::Manifold_tag());
+                CGAL::make_surface_mesh(c2t3_, surface, criteria, CGAL::Manifold_tag(),50);
                 //the output mesh is guaranteed to be manifold but may have boundaries.
                 //CGAL::make_surface_mesh(c2t3, surface, criteria, CGAL::Non_manifold_tag());
                 //the output mesh is guaranteed to be manifold but may have boundaries.
                 //CGAL::make_surface_mesh(c2t3, surface, criteria, CGAL::Manifold_with_boundary_tag());
+
+
+                ref_params.faired = true;
+                if (ref_params.faired) {
+
+
+                                 std::vector<vertex_descriptor > in_points;
+                       BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
+                                in_points.push_back(vd);
+                            }
+
+                    bool success = CGAL::Polygon_mesh_processing::fair(tmesh_, in_points);
+
+                }
 
                 processed_sm_ = true;
             }
