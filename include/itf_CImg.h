@@ -11,6 +11,9 @@
 /* CImg header */
 #define cimg_use_tiff
 #include<CImg.h>
+#include <set>
+#include <fstream>
+#include <iostream>
 
 /***
  * Interface template class which
@@ -40,10 +43,92 @@ namespace ccpm{
             return input_;
         }
 
+        void get_mapping(const std::string& prefix)
+        {
+//             cimg_library::CImg<V> img = (+input_);
+             std::ofstream csv(prefix + ("mapping.csv"));
+             csv << "x,y,z,n\n";
+             auto grad = input_.get_gradient();
+            cimg_forXYZC(input_,x,y,z,c) {
+                            const uint16_t pos = input_.offset(x, y, z, c);
+                            std::set<T> neigh;
+                            int s = 0;
+
+
+                            if (grad[0][pos]>0) {
+                                csv << x << "," << y << "," << z;
+
+                                if( input_.offset(x-1,y,z,c) < input_.size() )
+                                    neigh.insert(input_[input_.offset(x-1,y,z,c)]);
+                                if( input_.offset(x+1,y,z,c) < input_.size() )
+                                    neigh.insert(input_[input_.offset(x+1,y,z,c)]);
+                                if( input_.offset(x,y-1,z,c) < input_.size() )
+                                    neigh.insert(input_[input_.offset(x,y-1,z,c)]);
+                                if( input_.offset(x,y+1,z,c) < input_.size() )
+                                    neigh.insert(input_[input_.offset(x,y+1,z,c)]);
+                                if( input_.offset(x,y,z-1,c) < input_.size() )
+                                    neigh.insert(input_[input_.offset(x,y,z-1,c)]);
+                                if( input_.offset(x,y,z+1,c) < input_.size() )
+                                    neigh.insert(input_[input_.offset(x,y,z+1,c)]);
+
+                                for(auto n : neigh)
+                                    s += (int) n;
+                                csv << "," << (int) s;
+                                csv << "\n";
+
+                            }
+                        }
+
+        }
+
+        void to_isoValue(const std::string& prefix)
+        {
+            for(auto iso : {85,170,255})
+            {
+                int delta = 4;
+                cimg_library::CImg<V> img = (+input_);
+                #pragma omp parallel for
+                for(V* pv=img.data(); pv!=img.data()+ img.size(); ++pv)
+                {
+                   (*pv>iso-delta && *pv<iso+delta) ? *pv=1 : *pv=0;
+                }
+//                std::for_each(img.data(), img.data() + img.size(),[iso,delta](T&v){ (v>iso-delta && v<iso+delta) ? v=1 : v=0;});
+                img.erode(3).dilate(3).label(true);
+
+               #pragma omp parallel for
+                for (int j = 1; j < img.max(); ++j) {
+                    //counting components
+                    int c = 0;
+                    std::for_each(img.data(), img.data() + img.size(), [j,&c](const V& v){ (v==j) ? ++c : 0; });
+                    #pragma omp critical
+                        std::cerr << " Component " << j << " / " << img.max() << " with number of pixels " << c << std::endl;
+
+                    if( c<125 )
+                        std::for_each(img.data(), img.data() + img.size(), [j](V& v){ v = (v==j) ? 0 : v; });
+                }
+                img.save_tiff( (prefix + std::to_string(iso) + ("_cc.tiff")).c_str());
+            }
+        }
+
+        void to_cc_images(const std::string& prefix)
+        {
+                for(auto iso : {85,170,255}) {
+                    cimg_library::CImg<V> img;
+                    img.load_tiff((prefix + std::to_string(iso) + ("_cc.tiff")).c_str());
+                    for (int i = 1; i <= img.max(); ++i) {
+                        auto copy = (+img);
+                        int c = 0;
+                       std::for_each(copy.data(), copy.data() + copy.size(), [i,&c](V& v){ (v==i) ? ++c : v=0; });
+                       if(c>125)
+                          copy.save_tiff( (prefix + std::to_string(iso) + ("_cc_") + std::to_string(i) + (".tiff")).c_str());
+                    }
+
+                }
+        }
 
         void to_mlOtsu(int nclasses, const std::string& prefix)
         {
-           input_.blur_median(2);
+//           input_.blur_median(2);
            float m, M = input_.max_min(m);
            int nbins = 100;
            cimg_library::CImg<uint32_t> hist = input_.get_histogram(nbins, m, M),curr_ids(nclasses-1), thres_ids(nclasses-1);
@@ -111,14 +196,52 @@ namespace ccpm{
             for (int i = 0; i < nclasses; ++i) {
                 float min_as_val = (i==0) ? 0 : (M-m)*(2*thres_ids(i-1)+1)/(float)(2*nbins),
                         max_as_val = (i==nclasses-1) ? M : (M-m)*(2*thres_ids(i)+1)/(float)(2*nbins);
-                std::cout <<"[" << min_as_val << "-" << max_as_val << "] writing " << (prefix + std::to_string(i) + (".png")) << std::endl;
-                (input_.get_threshold(min_as_val) &
+                std::cout <<"[" << min_as_val << "-" << max_as_val << "] writing " << (prefix + std::to_string(i) + (".tiff")) << std::endl;
+                cimg_library::CImg<T> img = (input_.get_threshold(min_as_val) &
                 (cimg_library::CImg<T>(input_,false).fill(M)-input_).get_threshold(M-max_as_val))
-                    .get_erode(0).get_dilate(0).get_normalize(0,255).save_png( (prefix + std::to_string(i) + (".png")).c_str() );
+                    .get_erode(2).get_dilate(2).get_normalize(0,255);
+
+                img.save_tiff( (prefix + std::to_string(i) + (".tiff")).c_str() );
+                if(i>0) { // no need to label solid
+                    img.label();
+                    img.save_tiff((prefix + std::to_string(i) + ("_cc.tiff")).c_str());
+                    for (int j = 0; j < img.max(); ++j) {
+
+                        auto copy = (+img);
+                        int c = 0;
+                        std::for_each(copy.data(), copy.data() + copy.size(), [&c, j](float &v) { if(v == j){++c, v=1;}else{v=0;} });
+                        std::cout << " cc : " << j << " count " << c << std::endl;
+                        if (c > 15) {
+                            copy.normalize(0,255).save_tiff(
+                                    (prefix + std::to_string(i) + ("_") + std::to_string(j) + ("_cc.tiff")).c_str());
+                        }
+
+                    }
+                }
+//                else
+//                {
+//                    auto copy = (+img); copy = copy.max() - copy;
+//                    copy.label();
+//                    int c = 0;
+//                    std::for_each(copy.data(), copy.data() + copy.size(), [&c](float &v) { (v == 0) ? ++c, v=1 : v=0; });
+//                    std::cout << " cc : " << 0 << " count " << c << std::endl;
+//                    if (c > 15) {
+//                        copy.normalize(0,255).save_tiff(
+//                                (prefix + std::to_string(i) + ("_") + std::to_string(0) + ("_cc.tiff")).c_str());
+//                    }
+//
+//
+//                }
+
+
+
+
             }
 
 
-            };
+        };
+
+
 
 
         const cimg_library::CImg <V> &get_output() {
@@ -150,8 +273,10 @@ namespace ccpm{
         //black box function
         void process() {
             if (!processed_) {
-                output_ = input_.normalize(0, 255);
-                output_.blur(5);
+                std::cerr << " input [stats] (white/size)" << input_.get_normalize(0,1).sum() << " / " << input_.size() << std::endl;
+                output_ = input_.get_normalize(0, 255);
+//                output_.blur(1);
+                std::cerr << " output [stats] (white/size)" << output_.sum() << " / " << output_.size() << std::endl;
                 processed_ = true;
             }
         }

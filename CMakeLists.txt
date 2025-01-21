@@ -15,6 +15,8 @@ include_directories(${include})
 set( ccpm_src
     src/main.cpp )
 
+find_package(OpenMP REQUIRED)
+
 find_package( Threads REQUIRED )
 # CImg for stl import
 set(CIMG_DIR ./tpl/CImg)
@@ -34,6 +36,7 @@ endif()
 #cxxopts parser
 set(CXXOPTS_DIR ./tpl/cxxopts/include)
 include_directories(${CXXOPTS_DIR})
+find_package(OpenMP)
 
 
 # cgal
@@ -244,7 +247,7 @@ endif ()
 find_package(Boost COMPONENTS filesystem REQUIRED)
 
 add_executable(${exe} ${ccpm_src})
-target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen Threads::Threads CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
+target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
 
 #tests
 #add_subdirectory (tests)

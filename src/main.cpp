@@ -30,6 +30,7 @@ int main(int argc, const char **argv) {
                     ("d,debug", "Enable various level of verbosity and debug",
                      cxxopts::value<int>()->default_value("0"))
                     ("i,image", "image file name", cxxopts::value<std::string>())
+                    ("n,ncoords", "neighborhood coord file name", cxxopts::value<std::string>())
                     ("t,test", "testing", cxxopts::value<std::string>())
                     ("ard", "surface mesh definition",
                      cxxopts::value<std::vector<double>>()->default_value("30.,2.,1."))
@@ -49,7 +50,7 @@ int main(int argc, const char **argv) {
         boost::filesystem::create_directory(output_dir);
 
         //req. interfaces
-        ccpm::interface<ccpm::itf_to_CImg<float, float>> Itf;
+        ccpm::interface<ccpm::itf_to_CImg<u_int8_t , u_int16_t >> Itf;
         string prefix, base,  ext;
         std::cout << "image file " << options_parsed["image"].as<std::string>() << std::endl;
         Itf.set_input(options_parsed["image"].as<std::string>().c_str());
@@ -57,7 +58,11 @@ int main(int argc, const char **argv) {
 
         if (options_parsed.count("test")>0){
 
-            Itf.to_mlOtsu(3, output_dir.string() + ("/otsu_"));
+
+            Itf.get_mapping(output_dir.string() + ("/isoVal_"));
+            Itf.to_isoValue(output_dir.string() + ("/isoVal_"));
+            Itf.to_cc_images(output_dir.string() + ("/isoVal_"));
+//            Itf.to_mlOtsu(3, output_dir.string() + ("/otsu_"));
             return 0;
         }
 
@@ -67,6 +72,7 @@ int main(int argc, const char **argv) {
 
         Itf.get_output().save_inr("from-image.inr");
         Itf2.set_input("from-image.inr");
+        Itf2.input_neighFile(options_parsed["ncoords"].as<std::string>());
         Itf2.set_refined();
         Itf2.set_ARD(
                 options_parsed["ard"].as<std::vector<double>>()[0],
