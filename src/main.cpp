@@ -60,7 +60,7 @@ int main(int argc, const char **argv) {
 
 
             Itf.get_mapping(output_dir.string() + ("/isoVal_"));
-            Itf.to_isoValue(output_dir.string() + ("/isoVal_"));
+            Itf.to_isoValue(output_dir.string() + ("/isoVal_"),4);
             Itf.to_cc_images(output_dir.string() + ("/isoVal_"));
 //            Itf.to_mlOtsu(3, output_dir.string() + ("/otsu_"));
             return 0;

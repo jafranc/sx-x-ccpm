@@ -292,7 +292,7 @@ typedef K_neighbor_search::Distance                                     Distance
                     Traits(ppmap));
                 Distance tr_dist(ppmap);
 
-                csvfile << "# x, y, z, k1, k2, n" << std::endl;
+                csvfile << "x, y, z, k1, k2, n" << std::endl;
                 for (auto vd: boost::make_iterator_range(boost::vertices(tmesh_))) {
                     const auto pt = get(CGAL::vertex_point, tmesh_, vd);
                     const auto mf = get(cpm, vd);
@@ -358,8 +358,9 @@ typedef K_neighbor_search::Distance                                     Distance
                 Gray_level_image tmp(input_, 2.9f);
 
                 // the sphere actually bounds the whole image.
-                GT::Point_3 bounding_sphere_center(71., 71., 225.0); //TODO find defaulted or use input
-                GT::FT bounding_sphere_squared_radius = 225.0 * 225.0 * 2.;
+                GT::Point_3 bounding_sphere_center(input_.image()->xdim/2,input_.image()->ydim/2, input_.image()->zdim/2);
+                auto max_dim = std::max( std::max(input_.image()->xdim, input_.image()->ydim) , input_.image()->zdim );
+                GT::FT bounding_sphere_squared_radius = max_dim * max_dim  * 2.;
                 GT::Sphere_3 bounding_sphere(bounding_sphere_center,
                                              bounding_sphere_squared_radius);
 

@@ -14,6 +14,7 @@
 #include <set>
 #include <fstream>
 #include <iostream>
+#include <numeric>
 
 /***
  * Interface template class which
@@ -81,9 +82,9 @@ namespace ccpm{
 
         }
 
-        void to_isoValue(const std::string& prefix)
+        void to_isoValue(const std::string& prefix, int N /*kept component*/)
         {
-            for(auto iso : {85,170,255})
+            for(auto iso : {85,170})
             {
                 int delta = 4;
                 cimg_library::CImg<V> img = (+input_);
@@ -95,16 +96,30 @@ namespace ccpm{
 //                std::for_each(img.data(), img.data() + img.size(),[iso,delta](T&v){ (v>iso-delta && v<iso+delta) ? v=1 : v=0;});
                 img.erode(3).dilate(3).label(true);
 
-               #pragma omp parallel for
-                for (int j = 1; j < img.max(); ++j) {
-                    //counting components
-                    int c = 0;
-                    std::for_each(img.data(), img.data() + img.size(), [j,&c](const V& v){ (v==j) ? ++c : 0; });
-                    #pragma omp critical
-                        std::cerr << " Component " << j << " / " << img.max() << " with number of pixels " << c << std::endl;
+                std::vector< std::size_t > size_list;
 
-                    if( c<125 )
-                        std::for_each(img.data(), img.data() + img.size(), [j](V& v){ v = (v==j) ? 0 : v; });
+                for (int v1 = 0; v1 < img.max(); ++v1) {
+                    int c = 0;
+                    std::for_each(img.data(), img.data() + img.size(),[v1,&c](const V& vi){(vi==v1) ? ++c : 0;});
+                    size_list.push_back(c);
+                }
+                std::vector< V > index_list(size_list.size());
+                std::iota(index_list.begin(), index_list.end(),0);
+                std::sort(index_list.begin(), index_list.end(), [&size_list](const V& v1, const V& v2)
+                {
+                   return size_list[v1] > size_list[v2];
+                });
+
+
+               #pragma omp parallel for
+                for (int j = N+1; j < img.max(); ++j) {
+                    //counting components
+                    #pragma omp critical
+                    std::cerr << " Discard Component " << index_list.at(j) << " / " << img.max()
+                              << " with number of pixels " << size_list[j] << std::endl;
+
+
+                    std::for_each(img.data(), img.data() + img.size(), [j,&index_list](V& v){ v = (v==index_list[j]) ? 0 : v; });
                 }
                 img.save_tiff( (prefix + std::to_string(iso) + ("_cc.tiff")).c_str());
             }
@@ -112,17 +127,19 @@ namespace ccpm{
 
         void to_cc_images(const std::string& prefix)
         {
-                for(auto iso : {85,170,255}) {
+                for(auto iso : {85,170}) {
                     cimg_library::CImg<V> img;
                     img.load_tiff((prefix + std::to_string(iso) + ("_cc.tiff")).c_str());
+
+                    #pragma omp parallel for
                     for (int i = 1; i <= img.max(); ++i) {
                         auto copy = (+img);
                         int c = 0;
-                       std::for_each(copy.data(), copy.data() + copy.size(), [i,&c](V& v){ (v==i) ? ++c : v=0; });
-                       if(c>125)
-                          copy.save_tiff( (prefix + std::to_string(iso) + ("_cc_") + std::to_string(i) + (".tiff")).c_str());
+                        std::for_each(copy.data(), copy.data() + copy.size(), [i,&c](V& v){ (v==i) ? ++c : v=0; });
+                        #pragma omp critical
+                            if(c>125)
+                                 copy.save_tiff( (prefix + std::to_string(iso) + ("_cc_") + std::to_string(i) + (".tiff")).c_str());
                     }
-
                 }
         }
 

@@ -18,7 +18,7 @@ if __name__ == "__main__":
         vsum = np.ndarray((0,6))
         for i,file in enumerate(args.filename):
 
-            tag = 510
+            tag = None 
             # t = np.loadtxt(file,skiprows=1,delimiter=',')
             v = np.loadtxt(file,skiprows=1,delimiter=',')
             # u = np.loadtxt(file,skiprows=1,delimiter=',')
@@ -38,6 +38,7 @@ if __name__ == "__main__":
 
             xh,yh,h = axs[i,0].hist(v510[:,3],bins=100,label=file)
             axs[i,0].legend()
+            axs[i,0].set_xlim([-0.5,1.])
             # xf,yf,f = axs[1,0].hist(t510[:,3],bins=yh,label=args.filename[0])
             # axs[1,0].legend()
             # xg,yg,g = axs[2,0].hist(u510[:,3],bins=yh,label=args.filename[2])
@@ -46,10 +47,13 @@ if __name__ == "__main__":
             xh,yh,h = axs[i,1].hist(v510[:,4],bins=100)
             # xf,yf,f = axs[1,1].hist(t510[:,4],bins=yh)
             # xg,yg,g = axs[2,1].hist(u510[:,4],bins=yh)
+            axs[i,1].set_xlim([-0.5,1.])
         xh,yh,h = axs[-1,0].hist(vsum[:,3],bins=100,label='sum',color='r')
         axs[-1,0].legend()
+        axs[-1,0].set_xlim([-0.5,1.])
         xh,yh,h = axs[-1,1].hist(vsum[:,4],bins=100,label='sum',color='r')
         axs[-1,1].legend()
+        axs[-1,1].set_xlim([-0.5,1.])
 
         plt.show()
 
