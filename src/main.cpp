@@ -34,6 +34,7 @@ int main(int argc, const char **argv) {
                     ("t,test", "testing", cxxopts::value<std::string>())
                     ("ard", "surface mesh definition",
                      cxxopts::value<std::vector<double>>()->default_value("30.,2.,1."))
+                    ("c,ncomponent", "number of components", cxxopts::value<int>()->default_value("4"))
                     ("o,output", "output repository", cxxopts::value<std::string>())
                     ("h,help", "Print usage");
 
@@ -60,7 +61,7 @@ int main(int argc, const char **argv) {
 
 
             Itf.get_mapping(output_dir.string() + ("/isoVal_"));
-            Itf.to_isoValue(output_dir.string() + ("/isoVal_"),4);
+            Itf.to_isoValue(output_dir.string() + ("/isoVal_"), options_parsed["ncomponent"].as<int>());
             Itf.to_cc_images(output_dir.string() + ("/isoVal_"));
 //            Itf.to_mlOtsu(3, output_dir.string() + ("/otsu_"));
             return 0;
