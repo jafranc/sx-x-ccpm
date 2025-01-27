@@ -167,7 +167,7 @@ typedef K_neighbor_search::Distance                                     Distance
     private:
         static constexpr const double curvature_ratio = 0.1;
         static constexpr const double epsilon_box = 2.;
-        static constexpr const int dbg_lvl = 3;
+        static constexpr const int dbg_lvl = 0;
 
         CGAL_map m_F;
 
@@ -251,7 +251,7 @@ typedef K_neighbor_search::Distance                                     Distance
             std::ofstream out(fname);
             CGAL::output_surface_facets_to_off(out, c2t3_);
 
-            std::cout << "Final number of points: " << tr_.number_of_vertices() << "\n";
+            std::cout << "\n Final number of points: " << tr_.number_of_vertices() << "\n";
 
             return *this;
         }
