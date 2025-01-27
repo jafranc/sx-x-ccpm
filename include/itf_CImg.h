@@ -10,12 +10,14 @@
 
 /* CImg header */
 #define cimg_use_tiff
+#define cimg_use_openmp
+
 #include<CImg.h>
 #include <set>
 #include <fstream>
 #include <iostream>
 #include <numeric>
-
+#include <execution>
 /***
  * Interface template class which
  *  - input an image (cimg format)
@@ -82,9 +84,9 @@ namespace ccpm{
 
         }
 
-        void to_isoValue(const std::string& prefix, int N /*kept component*/)
+        void to_isoValue(const std::string& prefix,const std::vector<int>& isoval, int N /*kept component*/)
         {
-            for(auto iso : {85,170})
+            for(auto iso : isoval)
             {
                 int delta = 4;
                 cimg_library::CImg<V> img = (+input_);
@@ -111,23 +113,27 @@ namespace ccpm{
                 });
 
 
-               #pragma omp parallel for
-                for (int j = N+1; j < img.max(); ++j) {
-                    //counting components
-                    #pragma omp critical
-                    std::cerr << " Discard Component " << index_list.at(j) << " / " << img.max()
-                              << " with number of pixels " << size_list[j] << std::endl;
+////               #pragma omp parallel for
+//                std::for_each( std::execution::par_unseq, img.data(), img.data() + img.size(), [&index_list,N](V& v)
+//                    { v = (std::find(std::next(index_list.begin(),N+1),index_list.end(),v)!=index_list.end()) ? 0 : v;
+//                        if(std::find(std::next(index_list.begin(),N+1),index_list.end(),v)!=index_list.end())
+//                            std::cerr << "Discard " << v << "\n";
+//                    });
 
-
-                    std::for_each(img.data(), img.data() + img.size(), [j,&index_list](V& v){ v = (v==index_list[j]) ? 0 : v; });
+                #pragma omp parallel for
+                for(auto* ptr = img.data(); ptr != (img.data() + img.size()); ++ptr)
+                {
+//                    if(std::find(std::next(index_list.begin(),N+1),index_list.end(),*(ptr))!=index_list.end())
+//                        std::cerr << "Discard " << *ptr << "\n";
+                    *(ptr) = (std::find(std::next(index_list.begin(),N+1),index_list.end(),*(ptr))!=index_list.end()) ? 0 : *(ptr);
                 }
                 img.save_tiff( (prefix + std::to_string(iso) + ("_cc.tiff")).c_str());
             }
         }
 
-        void to_cc_images(const std::string& prefix)
+        void to_cc_images(const std::string& prefix, const std::vector<int>& isoval)
         {
-                for(auto iso : {85,170}) {
+                for(auto iso : isoval) {
                     cimg_library::CImg<V> img;
                     img.load_tiff((prefix + std::to_string(iso) + ("_cc.tiff")).c_str());
 

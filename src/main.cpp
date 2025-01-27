@@ -31,7 +31,8 @@ int main(int argc, const char **argv) {
                      cxxopts::value<int>()->default_value("0"))
                     ("i,image", "image file name", cxxopts::value<std::string>())
                     ("n,ncoords", "neighborhood coord file name", cxxopts::value<std::string>())
-                    ("t,test", "testing", cxxopts::value<std::string>())
+                    ("v,isoval", "isovalues at which isolate phases", cxxopts::value<std::vector<int>>())
+                    ("t,test", "testing", cxxopts::value<std::string>())//left in non-production
                     ("ard", "surface mesh definition",
                      cxxopts::value<std::vector<double>>()->default_value("30.,2.,1."))
                     ("c,ncomponent", "number of components", cxxopts::value<int>()->default_value("4"))
@@ -57,12 +58,12 @@ int main(int argc, const char **argv) {
         Itf.set_input(options_parsed["image"].as<std::string>().c_str());
         auto names = split_name(options_parsed["image"].as<std::string>().c_str());
 
-        if (options_parsed.count("test")>0){
+        if (options_parsed.count("isoval")>0){
 
 
             Itf.get_mapping(output_dir.string() + ("/isoVal_"));
-            Itf.to_isoValue(output_dir.string() + ("/isoVal_"), options_parsed["ncomponent"].as<int>());
-            Itf.to_cc_images(output_dir.string() + ("/isoVal_"));
+            Itf.to_isoValue(output_dir.string() + ("/isoVal_"), options_parsed["isoval"].as<std::vector<int>>(),options_parsed["ncomponent"].as<int>());
+            Itf.to_cc_images(output_dir.string() + ("/isoVal_"), options_parsed["isoval"].as<std::vector<int>>());
 //            Itf.to_mlOtsu(3, output_dir.string() + ("/otsu_"));
             return 0;
         }
