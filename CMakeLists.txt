@@ -40,6 +40,7 @@ find_package(OpenMP)
 
 
 # cgal
+find_package(Ceres REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 if(Eigen3_FOUND)
   include_directories(${EIGEN3_INCLUDE_DIRS})
@@ -245,9 +246,9 @@ if(CGAL_FOUND)
 endif ()
 
 find_package(Boost COMPONENTS filesystem REQUIRED)
-
+include(CGAL_Ceres_support)
 add_executable(${exe} ${ccpm_src})
-target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
+target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads Ceres::ceres CGAL::Ceres_support CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
 
 #tests
 #add_subdirectory (tests)

@@ -52,13 +52,14 @@ namespace ccpm{
              std::ofstream csv(prefix + ("mapping.csv"));
              csv << "x,y,z,n\n";
              auto grad = input_.get_gradient();
+             std::cout << "\n Mapping  info : " << grad.size() << " " << grad.max() << " " << grad.min() <<std::endl;
+
             cimg_forXYZC(input_,x,y,z,c) {
-                            const uint16_t pos = input_.offset(x, y, z, c);
+                            const uint64_t pos = input_.offset(x, y, z, c);
                             std::set<T> neigh;
                             int s = 0;
 
-
-                            if (grad[0][pos]>0) {
+                            if ( grad[0][pos] + grad[1][pos] + grad[2][pos] != 0.0 ) {
                                 csv << x << "," << y << "," << z;
 
                                 if( input_.offset(x-1,y,z,c) < input_.size() )
@@ -88,7 +89,7 @@ namespace ccpm{
         {
             for(auto iso : isoval)
             {
-                int delta = 4;
+                int delta = 1;
                 cimg_library::CImg<V> img = (+input_);
                 #pragma omp parallel for
                 for(V* pv=img.data(); pv!=img.data()+ img.size(); ++pv)
@@ -96,7 +97,7 @@ namespace ccpm{
                    (*pv>iso-delta && *pv<iso+delta) ? *pv=1 : *pv=0;
                 }
 //                std::for_each(img.data(), img.data() + img.size(),[iso,delta](T&v){ (v>iso-delta && v<iso+delta) ? v=1 : v=0;});
-                img.erode(3).dilate(3).label(true);
+//                img.erode(3).dilate(3).label(true);
 
                 std::vector< std::size_t > size_list;
 
@@ -241,30 +242,30 @@ namespace ccpm{
 
                     }
                 }
-//                else
-//                {
-//                    auto copy = (+img); copy = copy.max() - copy;
-//                    copy.label();
-//                    int c = 0;
-//                    std::for_each(copy.data(), copy.data() + copy.size(), [&c](float &v) { (v == 0) ? ++c, v=1 : v=0; });
-//                    std::cout << " cc : " << 0 << " count " << c << std::endl;
-//                    if (c > 15) {
-//                        copy.normalize(0,255).save_tiff(
-//                                (prefix + std::to_string(i) + ("_") + std::to_string(0) + ("_cc.tiff")).c_str());
-//                    }
-//
-//
-//                }
-
-
-
 
             }
-
-
         };
 
 
+        const cimg_library::CImg<V>& get_contactSphere(int n = 128, double al = 0.8)
+        {
+            cimg_library::CImg<V> img(n,n,n,1,0.0);
+            int r = static_cast<int>(double(60.0/128.0)*n), xc = img.width()/2, yc = img.height()/2 ,zc= img.depth()/2;
+//            double al = 0.8;
+            cimg_forXYZ(img,x,y,z)
+            {
+                if( ( (x-xc)*(x-xc) + (y-yc)*(y-yc) + (z-zc)*(z-zc) < r*r )
+                && y < yc + al*r )
+                    img(x,y,z) = 3.0;
+                else if ( y >=  yc + al*r )
+                    img(x,y,z) = 2.0;
+                else
+                    img(x,y,z) = 1.0;
+            }
+
+            img.save_tiff(("/tmp/contactSphere"+std::to_string(n)+"_"+ std::to_string(al) +".tiff").c_str());
+
+        }
 
 
         const cimg_library::CImg <V> &get_output() {

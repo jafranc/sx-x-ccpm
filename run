@@ -1,0 +1,28 @@
+#!/bin/bash
+
+
+export ccpm=/home/jfranc/codes/cxx/ccpm/build/ccpm
+export alp=0.9
+export output=/home/jfranc/codes/cxx/ccpm/build/test/test-1contact-${alp}
+
+[ ! -e ${output} ] && mkdir -p ${output} 
+
+for i in 64 128 256;
+do 
+	$ccpm --test $i --test-angle ${alp}; 
+done
+
+for i in 64 128 256; 
+do 
+	[ ! -e ${output}/${i} ] && mkdir -p ${output}/${i}
+	$ccpm --image /tmp/contactSphere${i}_$(printf %1.6f ${alp}).tiff -v 1,2,3 -o ${output}/${i}; 
+	$ccpm --image ${output}/${i}/isoVal_3_cc_1.tiff -n ${output}/${i}/isoVal_mapping.csv -o ${output}/${i}; 
+done
+
+for i in 64 128 256; 
+do
+	cd ${output}/${i}/ 
+	/home/jfranc/codes/cxx/ccpm/build/test/.venv/bin/python3.10 /home/jfranc/codes/cxx/ccpm/pt.py isoVal_3_cc_1.stl -n $i; 
+	echo '\n----\n'; 
+done
+

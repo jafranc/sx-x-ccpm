@@ -34,9 +34,16 @@
 #include <CGAL/bilateral_smooth_point_set.h>
 #include <CGAL/Polygon_mesh_slicer.h>
 #include <CGAL/bounding_box.h>
+#include <CGAL/Polygon_mesh_processing/interpolated_corrected_curvatures.h>
+
+//mesh refine and fair
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 #include <CGAL/Polygon_mesh_processing/refine.h>
 #include <CGAL/Polygon_mesh_processing/fair.h>
+//mesh smoothing
+#include <CGAL/Polygon_mesh_processing/angle_and_area_smoothing.h>
+#include <CGAL/Polygon_mesh_processing/detect_features.h>
+
 //for least square plane fitting
 #include <CGAL/linear_least_squares_fitting_3.h>
 #include <CGAL/CORE_algebraic_number_traits.h>
@@ -100,6 +107,9 @@ namespace ccpm {
         typedef Triangle_mesh::Property_map<vertex_descriptor, int> Vertex_PM_type;
         typedef Triangle_mesh::Property_map <vertex_descriptor, std::vector<double>> Curvature_PM_type;
 
+        //Gaussian, mean curvature another way
+        typedef  Triangle_mesh::Property_map<vertex_descriptor, double > CurvatureMaps_type;
+
         //for local refinement
         //TODO look at what was there and what/why we extracted from
 //    typedef T_PolyhedralSurf_rings<Triangle_mesh, Vertex_PM_type > Poly_rings
@@ -142,8 +152,8 @@ typedef K_neighbor_search::Distance                                     Distance
             // default parameter values and global variables
             unsigned int d_fitting = 2;
             unsigned int d_monge = 2;
-            unsigned int nb_rings = 100;//seek min # of rings to get the required #pts
-            unsigned int nb_points_to_use = 20;//
+            unsigned int nb_rings = 3;//seek min # of rings to get the required #pts
+            unsigned int nb_points_to_use = 10;//
             bool verbose = (dbg_lvl > 2);
             unsigned int min_nb_points = (d_fitting + 1) * (d_fitting + 2) / 2;
         } ref_params;
@@ -267,8 +277,12 @@ typedef K_neighbor_search::Distance                                     Distance
             if (sname.find(v) != std::string::npos) {
                 size_t lastindex = sname.find_last_of(".");
                 string prefix = sname.substr(0, lastindex);
+
+                string postfix = sname.substr(lastindex + 1);
                 string off_fname = prefix + (".off");
+//                if (postfix == "inr") {//DO treat image to produce off
                 save_surf_off(off_fname.c_str());
+//                }
                 read_off(off_fname.c_str());
                 auto cpm = process_refined(false);
                 //TODO refactor / clean up
@@ -292,16 +306,34 @@ typedef K_neighbor_search::Distance                                     Distance
                     Traits(ppmap));
                 Distance tr_dist(ppmap);
 
-                csvfile << "x, y, z, k1, k2, n" << std::endl;
+                auto [mcurv, gcurv] = process_curvature();
+
+                csvfile << "x, y, z, k1, k2, km, kG, n, e" << std::endl;
                 for (auto vd: boost::make_iterator_range(boost::vertices(tmesh_))) {
                     const auto pt = get(CGAL::vertex_point, tmesh_, vd);
                     const auto mf = get(cpm, vd);
 
-                    K_neighbor_search search(tree, pt/*query*/,1/*nb nearest neigh*/ ,0,true,tr_dist);
-                    for(K_neighbor_search::iterator it = search.begin(); it != search.end(); it++) {
+                    //try #1
+                    uintmax_t nv = tmesh_.num_vertices();
+                    uintmax_t ne = tmesh_.num_edges();
+                    uintmax_t nf = tmesh_.num_faces();
+                    intmax_t euler = nv - ne + nf;
+//try #2
+//          LCC_3::Dart_const_descriptor root = m_lcc.dart_descriptor(CGAL::get_default_random().get_int(0,
+//                                                            static_cast<int>(m_lcc.number_of_darts())));
+
+
+                    K_neighbor_search search(tree, pt/*query*/,25/*nb nearest neigh*/ ,0,true,tr_dist);
                         csvfile << pt[0] << "," << pt[1] << "," << pt[2] << "," << mf[0] << "," << mf[1] << ","
-                                << m_F.at(pts[it->first]) << std::endl;
+                        << get(mcurv,vd) << "," << get(gcurv,vd) << ", ";
+
+                        //get max over the 3-closest points
+                    double avg = 0.;
+                    for(K_neighbor_search::iterator it = search.begin(); it != search.end(); it++) {
+                       avg = std::max(avg,m_F.at(pts[it->first]));
                     }
+
+                    csvfile << avg << "," << euler << std::endl;
 
                 }
                 std::cout << "Final number of points: " << tr_.number_of_vertices() << "\n";
@@ -405,6 +437,24 @@ typedef K_neighbor_search::Distance                                     Distance
             }
         }
 
+        std::pair<CurvatureMaps_type, CurvatureMaps_type> process_curvature()
+        {
+            CurvatureMaps_type mcurv, gcurv;
+            bool created;
+
+            boost::tie(mcurv, created) = tmesh_.add_property_map<vertex_descriptor, double >("v:mcm", 0);
+            assert(created);
+            boost::tie(gcurv, created) = tmesh_.add_property_map<vertex_descriptor, double >("v:gcm", 0);
+            assert(created);
+
+              PMP::interpolated_corrected_curvatures(tmesh_,
+                CGAL::parameters::vertex_mean_curvature_map(mcurv)
+                     .vertex_Gaussian_curvature_map(gcurv)
+                     .ball_radius(0.5));
+
+            return std::make_pair(mcurv,gcurv);
+        }
+
         Curvature_PM_type process_refined(bool do_actually_refine) {
 
             //CUP
@@ -414,9 +464,66 @@ typedef K_neighbor_search::Distance                                     Distance
             boost::tie(cpm, created) = tmesh_.add_property_map<vertex_descriptor, std::vector<double>>("v:cpm", {0, 0});
 //            assert(created);
 
+            if( true ) //ref_paramas.smoothing
+            {
+                typedef boost::property_map<Triangle_mesh, CGAL::edge_is_feature_t>::type EIFMap;
+                EIFMap eif = get(CGAL::edge_is_feature, tmesh_);
+                PMP::detect_sharp_edges(tmesh_, 60, eif);
+
+                int sharp_counter = 0;
+                for(auto e : edges(tmesh_))
+                    if(get(eif, e))
+                        ++sharp_counter;
+
+                std::cout << "\n" << sharp_counter << " sharp edges" << std::endl;
+
+                int nb_iterations = 30;
+                PMP::angle_and_area_smoothing(tmesh_, CGAL::parameters::number_of_iterations(nb_iterations)
+                        .use_safety_constraints(false) // authorize all moves
+                        .edge_is_constrained_map(eif));
+
+
+            if( true ) //ref_params.faired
+            {
+                std::vector<Point> in_points;  //container for data points
+                BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
+                                in_points.push_back(get(CGAL::vertex_point, tmesh_, vd));
+                            }
+                Kernel::Iso_cuboid_3 c3 = CGAL::bounding_box(in_points.begin(), in_points.end());
+                in_points.clear();
+                // second arg is epsilon detection
+                std::set<face_descriptor> inside_faces = inside_face(c3, epsilon_box, tmesh_);
+
+
+                std::vector<vertex_descriptor> point_from_faces;
+//                BOOST_FOREACH(face_descriptor fd, inside_faces)
+//                                BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(tmesh_.halfedge(fd),
+//                                                                                         tmesh_))
+//                                                                                         point_from_faces.push_back(
+//                                                        vd);
+
+                for(auto ed : boost::make_iterator_range(edges(tmesh_)) ) {
+                                if (get(eif, ed)) {
+                                    point_from_faces.push_back(boost::source(ed,tmesh_));
+                                    point_from_faces.push_back(boost::target(ed,tmesh_));
+                                }
+                            }
+
+                bool success = CGAL::Polygon_mesh_processing::fair(tmesh_, point_from_faces);
+                }
+            }
+
+            //DEBUG
+            if (dbg_lvl > 1) {
+                std::ofstream faired_off("faired.off");
+                faired_off.precision(17);
+                faired_off << tmesh_;
+                faired_off.close();
+            }
+
             if (!processed_refined_) {
 
-                std::cout << " Processing refinement \n";
+                std::cout << " Analyzing refinement \n";
 
                 std::set<face_descriptor> selected_faces;
 
@@ -483,7 +590,7 @@ typedef K_neighbor_search::Distance                                     Distance
                                             }
 
                 mean_delta = 1.0 / delta.size() * std::accumulate(delta.begin(), delta.end(), 0.0);
-                std::cout << "refinement -- mean delta :" << mean_delta;
+                std::cout << "refinement -- mean delta :" << mean_delta << std::endl;
 
                 //now put face in bucket
                 if (do_actually_refine) {
@@ -541,7 +648,9 @@ typedef K_neighbor_search::Distance                                     Distance
                                 selected_faces,
                                 1.,
                                 tmesh_);
-                    } else {
+                    }
+                    else
+                    {
                         std::vector<face_descriptor> new_faces;
                         std::vector<vertex_descriptor> new_vertices;
 
@@ -562,23 +671,7 @@ typedef K_neighbor_search::Distance                                     Distance
                     }
 
 
-                    if (ref_params.faired) {
-                        std::vector<vertex_descriptor> point_from_faces;
-                        BOOST_FOREACH(face_descriptor fd, selected_faces)
-                                        BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(tmesh_.halfedge(fd),
-                                                                                                 tmesh_))point_from_faces.push_back(
-                                                                vd);
 
-                        bool success = CGAL::Polygon_mesh_processing::fair(tmesh_, point_from_faces);
-                    }
-
-                    //DEBUG
-                    if (dbg_lvl > 1) {
-                        std::ofstream faired_off("faired.off");
-                        faired_off.precision(17);
-                        faired_off << tmesh_;
-                        faired_off.close();
-                    }
                 }// end of do_actually_refined
 
                 processed_refined_ = true;

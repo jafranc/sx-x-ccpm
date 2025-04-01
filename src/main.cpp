@@ -16,7 +16,8 @@ std::tuple<string,string,string> split_name(const string& fname)
 {
          size_t premindex = fname.find_last_of("/");
          size_t lastindex = fname.find_last_of(".");
-         return std::make_tuple(fname.substr(0,premindex), fname.substr(premindex, lastindex-premindex), fname.substr(lastindex,fname.size()));
+    return std::make_tuple(fname.substr(0, premindex), fname.substr(premindex, lastindex - premindex),
+                           fname.substr(lastindex + 1, fname.size()));
 }
 
 
@@ -32,7 +33,8 @@ int main(int argc, const char **argv) {
                     ("i,image", "image file name", cxxopts::value<std::string>())
                     ("n,ncoords", "neighborhood coord file name", cxxopts::value<std::string>())
                     ("v,isoval", "isovalues at which isolate phases", cxxopts::value<std::vector<int>>())
-                    ("t,test", "testing", cxxopts::value<std::string>())//left in non-production
+                    ("t,test", "testing", cxxopts::value<int>())//left in non-production
+                    ("a,test-angle", "testing-ange", cxxopts::value<double>())//left in non-production
                     ("ard", "surface mesh definition",
                      cxxopts::value<std::vector<double>>()->default_value("30.,2.,1."))
                     ("c,ncomponent", "number of components", cxxopts::value<int>()->default_value("4"))
@@ -47,16 +49,25 @@ int main(int argc, const char **argv) {
         std::cout << options.help() << std::endl;
         exit(0);
     }
+    else if (options_parsed.count("test") > 0 && options_parsed.count("test-angle") > 0 )
+    {
+            ccpm::interface<ccpm::itf_to_CImg<u_int8_t , u_int16_t >> Itf;
+            Itf.get_contactSphere( options_parsed["test"].as<int>(), options_parsed["test-angle"].as<double>() );
+    }
     else if(options_parsed.count("output")>0) {
         boost::filesystem::path output_dir = boost::filesystem::path(options_parsed["output"].as<std::string>());
         boost::filesystem::create_directory(output_dir);
 
         //req. interfaces
         ccpm::interface<ccpm::itf_to_CImg<u_int8_t , u_int16_t >> Itf;
-        string prefix, base,  ext;
+        string prefix, base;
+        auto names = split_name(options_parsed["image"].as<std::string>().c_str());
+        size_t lastindex = options_parsed["image"].as<std::string>().find_last_of(".");
+        auto ext = std::get<2>(names);
+        ccpm::interface<ccpm::itf_to_CGAL> Itf2;
+        if (ext == "tiff") {
         std::cout << "image file " << options_parsed["image"].as<std::string>() << std::endl;
         Itf.set_input(options_parsed["image"].as<std::string>().c_str());
-        auto names = split_name(options_parsed["image"].as<std::string>().c_str());
 
         if (options_parsed.count("isoval")>0){
 
@@ -68,12 +79,12 @@ int main(int argc, const char **argv) {
             return 0;
         }
 
-
-        ccpm::interface<ccpm::itf_to_CGAL> Itf2;
-
-
         Itf.get_output().save_inr("from-image.inr");
         Itf2.set_input("from-image.inr");
+        } else if (ext == "off") {
+
+            Itf2.set_input(options_parsed["image"].as<std::string>().c_str());
+        }
         Itf2.input_neighFile(options_parsed["ncoords"].as<std::string>());
         Itf2.set_refined();
         Itf2.set_ARD(
