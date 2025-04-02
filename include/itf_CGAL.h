@@ -483,7 +483,7 @@ typedef K_neighbor_search::Distance                                     Distance
                         .edge_is_constrained_map(eif));
 
 
-            if( true ) //ref_params.faired
+            if( false ) //ref_params.faired
             {
                 std::vector<Point> in_points;  //container for data points
                 BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {

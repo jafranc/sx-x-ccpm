@@ -246,8 +246,41 @@ namespace ccpm{
             }
         };
 
+        const cimg_library::CImg<V>& get_contactSphere(int n, const std::vector<double>& al, const std::vector<double>& rot)
+        {
+            assert(rot.size() == al.size()-1);
+            std::string identity;
+            cimg_library::CImg<V> img(n,n,n,1,0.0);
+            img += get_contactSphere(n,al[0]);
+            for (int i = 0; i < rot.size(); ++i) {
 
-        const cimg_library::CImg<V>& get_contactSphere(int n = 128, double al = 0.8)
+                max_add(img, get_contactSphere(n,al[i+1]).get_rotate(rot[i],1/*nearest*/,0/*dirichlet*/),3);
+                identity += std::to_string(rot[i]) + "_" + std::to_string(al[i+1]) + "_";
+            }
+
+            std::string cname = "/tmp/contactSphere"+std::to_string(n)+"_"+std::to_string(al[0])+"_";
+            cname += identity;
+            cname += ".tiff";
+            img.save_tiff( cname.c_str());
+
+        }
+
+        void max_add(cimg_library::CImg<V>& img,const cimg_library::CImg<V>& other,int mask_value)
+        {
+            assert(img.size() == other.size() );
+            cimg_forXYZ(img,x,y,z)
+                    {
+                        if(img(x,y,z) == mask_value && img(x,y,z)!=other(x,y,z))
+                            img(x,y,z) = other(x,y,z);
+                        else if (other(x,y,z) == mask_value && img(x,y,z)!=other(x,y,z))
+                            img(x,y,z) = img(x,y,z);
+                        else
+                            img(x,y,z) = std::max(img(x,y,z), other(x,y,z));
+                    }
+
+        }
+
+        cimg_library::CImg<V> get_contactSphere(int n, double al)
         {
             cimg_library::CImg<V> img(n,n,n,1,0.0);
             int r = static_cast<int>(double(60.0/128.0)*n), xc = img.width()/2, yc = img.height()/2 ,zc= img.depth()/2;
@@ -263,7 +296,9 @@ namespace ccpm{
                     img(x,y,z) = 1.0;
             }
 
-            img.save_tiff(("/tmp/contactSphere"+std::to_string(n)+"_"+ std::to_string(al) +".tiff").c_str());
+//            img.save_tiff(("/tmp/contactSphere"+std::to_string(n)+"_"+ std::to_string(al) +".tiff").c_str());
+
+            return img;
 
         }
 

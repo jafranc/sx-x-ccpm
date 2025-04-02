@@ -34,7 +34,8 @@ int main(int argc, const char **argv) {
                     ("n,ncoords", "neighborhood coord file name", cxxopts::value<std::string>())
                     ("v,isoval", "isovalues at which isolate phases", cxxopts::value<std::vector<int>>())
                     ("t,test", "testing", cxxopts::value<int>())//left in non-production
-                    ("a,test-angle", "testing-ange", cxxopts::value<double>())//left in non-production
+                    ("a,test-angle", "testing-ange", cxxopts::value<std::vector<double>>())//left in non-production
+                    ("r,test-rot", "testing-rot", cxxopts::value<std::vector<double>>())//left in non-production
                     ("ard", "surface mesh definition",
                      cxxopts::value<std::vector<double>>()->default_value("30.,2.,1."))
                     ("c,ncomponent", "number of components", cxxopts::value<int>()->default_value("4"))
@@ -49,10 +50,10 @@ int main(int argc, const char **argv) {
         std::cout << options.help() << std::endl;
         exit(0);
     }
-    else if (options_parsed.count("test") > 0 && options_parsed.count("test-angle") > 0 )
+    else if (options_parsed.count("test") > 0 && options_parsed.count("test-angle") > 0 && options_parsed.count("test-rot")>0)
     {
             ccpm::interface<ccpm::itf_to_CImg<u_int8_t , u_int16_t >> Itf;
-            Itf.get_contactSphere( options_parsed["test"].as<int>(), options_parsed["test-angle"].as<double>() );
+            Itf.get_contactSphere( options_parsed["test"].as<int>(), options_parsed["test-angle"].as<std::vector<double>>(), options_parsed["test-rot"].as<std::vector<double>>() );
     }
     else if(options_parsed.count("output")>0) {
         boost::filesystem::path output_dir = boost::filesystem::path(options_parsed["output"].as<std::string>());
