@@ -61,6 +61,7 @@
 #include <CGAL/Orthogonal_k_neighbor_search.h>
 
 #include "Utilities.hpp"
+#include <boost/graph/connected_components.hpp>
 
 namespace PMP = CGAL::Polygon_mesh_processing;
 //TODO refactor itf around Porjector Slicer I/O and Refiner classes
@@ -101,6 +102,7 @@ namespace ccpm {
         typedef std::vector<std::pair<Point, double> > PDVec;
 
         typedef boost::graph_traits<Triangle_mesh>::vertex_descriptor vertex_descriptor;
+        typedef boost::graph_traits<Triangle_mesh>::edge_descriptor edge_descriptor;
         typedef boost::graph_traits<Triangle_mesh>::face_descriptor face_descriptor;
 
         //curvature meas.
@@ -182,6 +184,7 @@ namespace ccpm {
         static constexpr const int dbg_lvl = 0;
 
         CGAL_map m_F;
+        Triangle_mesh::Property_map<vertex_descriptor, double> triple_map_;
 
 
     public:
@@ -305,10 +308,29 @@ namespace ccpm {
 //                          Splitter(),
 //                          Traits(ppmap));
 //                Distance tr_dist(ppmap);
-                build_tree(pts);
-                process_triple_contact();
-
                 auto [mcurv, gcurv] = process_curvature();
+
+                //produce angles
+                build_tree(pts);
+
+                std::cout << " angle :: label, numel, euler, iv, area \n";
+                auto vvec = process_triple_contact();
+                for (const auto &[k, v]: vvec.first) {
+                    const auto &map = vvec.second[k];//is the set of faces
+                    auto euler = v;
+                    if (map.size() > 25) {
+                        // np.arccos( ( 2 * euler * np.pi - f) / 2 / np.pi) * 180 / np.pi
+                        std::ofstream basicOfstream(
+                                std::string("./csvfile_" + std::to_string(k) + ".csv").c_str());
+                        std::cout << k << ", " << map.size()
+                                  << "," << euler << ", "
+                                  << get_angle(map, gcurv, [euler](double t) {
+                                      return acos((2 * euler * M_PI - t) / 2. / M_PI - 1.) * 180 / M_PI;
+                                  }, basicOfstream) << std::endl;
+                    }
+
+                }
+
 
                 csvfile << "x, y, z, k1, k2, km, kG, n, e" << std::endl;
                 for (auto vd: boost::make_iterator_range(boost::vertices(tmesh_))) {
@@ -321,18 +343,8 @@ namespace ccpm {
                     uintmax_t nf = tmesh_.num_faces();
                     intmax_t euler = nv - ne + nf;
 
-//                    K_neighbor_search search(tree, pt/*query*/, 25/*nb nearest neigh*/ , 0, true, tr_dist);
-
                     csvfile << pt[0] << "," << pt[1] << "," << pt[2] << "," << mf[0] << "," << mf[1] << ","
                             << get(mcurv, vd) << "," << get(gcurv, vd) << ", ";
-
-                    //get max over the 3-closest points
-//                    double avg = 0.;
-//                    for (K_neighbor_search::iterator it = search.begin(); it != search.end(); it++) {
-//                        avg = std::max(avg, m_F.at(pts[it->first]));
-//                    }
-
-//                    csvfile << avg << "," << euler << std::endl;
                     csvfile << tags_projection(pt) << "," << euler << std::endl;
 
                 }
@@ -442,95 +454,163 @@ namespace ccpm {
             }
         }
 
-        std::unordered_map<int, std::vector<face_descriptor>> process_triple_contact() {
+        std::pair<std::unordered_map<int, int>,
+                std::unordered_map<int, std::set<face_descriptor>>> process_triple_contact() {
             //TODO build a connected component list of faces whose is in contact with one vertices of triple line
-            std::unordered_map<int, std::vector<face_descriptor>>  vvec;
-            utility::UnionFind cc(tmesh_.num_faces());
+            build_triple_map();
+            std::unordered_map<int, int> eulers;
+            std::unordered_map<int, std::set<face_descriptor> > vvec;
+            std::vector<vertex_descriptor> cc;
+
+            //try #2 -- build filtered graph on triple value
+            Is_triple filter(triple_map_, tmesh_);
+            boost::filtered_graph<Triangle_mesh, Is_triple> filtered_mesh(tmesh_, filter);
+            // compute cc
+            std::vector<int> component(num_vertices(filtered_mesh));
+            int numCC = boost::connected_components(filtered_mesh, &component[0]);
+
+            //stack faces around vertices
             BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
-//                            if (fd != tmesh_.null_face())
-                                cc.make_set(fd.idx());
-                        }
 
+                            if (fd != Triangle_mesh::null_face()) {
 
-            BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
-
-                            if (fd != tmesh_.null_face() && is_triple(fd)) {
-                                CGAL::Face_around_face_iterator<Triangle_mesh> fbegin, fit, fend;
-                                boost::tie(fbegin, fend) = CGAL::faces_around_face(tmesh_.halfedge(fd), tmesh_);
-                                for (auto f: faces_around_face(tmesh_.halfedge(fd), tmesh_)) {
-                                    if (is_triple(f) && f != Triangle_mesh::null_face())
-                                                cc.set_union(fd.idx(),f.idx());
-
+                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+                                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
+                                     vbegin != vend;
+                                     ++vbegin) {
+                                    vvec[component[*vbegin]].insert(fd);
                                 }
-
-
                             }
                         }
 
+            for (int i = 0; i < numCC; ++i) {
 
-//            for (int i = 0; i < cc.size(); ++i) {
-//                std::shared_ptr<utility::UnionFind> root = cc[i];
-////                while(find(root)!=root)
-////                    root = find(root);
-//
-//                if(root.get() != nullptr) {
-//                    auto ii = std::find(cc.begin(), cc.end(), root);
-//                    vvec[std::distance(cc.begin(),ii)].push_back(face_descriptor{i});
-//                }
-//            }
-            for(auto cci : cc.get_ordered_component()) {
-                std::copy(cci.begin(), cci.end(), std::ostream_iterator<int>(std::cerr, ","));
-                std::cerr << " ------ \n";
-            }
-            return vvec;
-        }
-
-
-        bool is_triple(const face_descriptor &fd) {
-
-            double triple_value_ = 0.;//TODO change it
-            double max_value = 0.;
-
-            CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
-            for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
-                 vbegin != vend;
-                 ++vbegin) {
-
-                const auto pt = get(CGAL::vertex_point, tmesh_, *vbegin);
-                auto val = tags_projection(pt);
-                max_value = std::max(max_value, val);
-
-                if (max_value >= triple_value_ * .9)
-                    return true;
-                else
-                    return false;
+                auto [nv, ne] = filtered_by_component(vvec[i]);
+                uintmax_t nf = vvec[i].size();
+                intmax_t euler = nv - ne + nf;
+//                auto euler = 2;
+                eulers[i] = euler;
 
             }
+
+            return std::make_pair<std::unordered_map<int, int>,
+                    std::unordered_map<int, std::set<face_descriptor>>>(std::move(eulers), std::move(vvec));
         }
 
+        std::pair<int, int> filtered_by_component(const std::set<face_descriptor> &face_set) {
 
-        bool is_triple(const vertex_descriptor &vd) {
+            Is_component filter(face_set, tmesh_);
+            boost::filtered_graph<Triangle_mesh, Is_component> filtered_mesh(tmesh_, filter);
+            //
+            std::set<int> filtered_vertices;
+            int ne;
+            boost::filtered_graph<Triangle_mesh, Is_component>::edge_iterator eb, ee;
+            boost::tie(eb, ee) = boost::edges(filtered_mesh);
+            ne = boost::distance(eb, ee);
+            for (auto ei = eb; ei != ee; ++ei) {
+                filtered_vertices.insert(boost::source(*ei, filtered_mesh));
+                filtered_vertices.insert(boost::target(*ei, filtered_mesh));
+            }
 
-            double triple_value_ = 5.10;//TODO change it
-            const auto pt = get(CGAL::vertex_point, tmesh_, vd);
+            return std::make_pair(filtered_vertices.size(), ne);
 
-            if (tags_projection(pt) >= triple_value_ * .9)
-                return true;
-            else
+        }
+
+//TODO use https://doc.cgal.org/latest/BGL/structCGAL_1_1Face__filtered__graph.html
+        void build_triple_map() {
+            bool created;
+            boost::tie(triple_map_, created) = tmesh_.add_property_map<vertex_descriptor, double>("v:triple", 0);
+
+            BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
+                            get(triple_map_, vd) = tags_projection(get(CGAL::vertex_point, tmesh_, vd));
+                        }
+        }
+
+        //filter struct
+        struct Is_triple {
+
+            Is_triple() {};
+
+            Is_triple(Triangle_mesh::Property_map<vertex_descriptor, double> mapin, const Triangle_mesh &tm)
+                    : m_tag_values(mapin), m_tm(tm) {};
+            Triangle_mesh::Property_map<vertex_descriptor, double> m_tag_values;
+            Triangle_mesh m_tm;
+            static constexpr double TRIPLE_VALUE = 510;
+
+            bool operator()(const vertex_descriptor &vd) const {
+
+                return get(m_tag_values, vd) == TRIPLE_VALUE;
+            }
+
+            bool operator()(const edge_descriptor &ed) const {
+
+                auto vds = source(ed, m_tm), vdt = target(ed, m_tm);
+                return (get(m_tag_values, vds) == TRIPLE_VALUE) &&
+                       (get(m_tag_values, vdt) == TRIPLE_VALUE);
+            }
+
+        };
+
+        struct Is_component {
+            Is_component() {};
+
+            Is_component(const std::set<face_descriptor> &map, const Triangle_mesh &tm)
+                    : m_tags(map), m_tm(tm) {};
+            std::set<face_descriptor> m_tags;
+            Triangle_mesh m_tm;
+
+            bool operator()(const vertex_descriptor &vd) const {
+
+                for (const auto &fd: m_tags) {
+                    CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+                    for (boost::tie(vbegin, vend) = vertices_around_face(m_tm.halfedge(fd), m_tm);
+                         vbegin != vend;
+                         ++vbegin) {
+                        if (vd == *vbegin)
+                            return true;
+                    }
+
+                }
+
                 return false;
+            }
 
-        }
+            bool operator()(const edge_descriptor &ed) const {
 
-        double get_angle(const std::vector<face_descriptor> &cci, const std::function<double(double)> &fn) {
-            double integrate;
-            //TODO get area of all triangles
-            // and then weighted sum from mean_curvature*area
+                auto vds = source(ed, m_tm), vdt = target(ed, m_tm);
 
+                return this->operator()(vds) && this->operator()(vdt);
+            }
+        };
+
+
+        double get_angle(const std::set<face_descriptor> &cci, const CurvatureMaps_type &gcurv,
+                         const std::function<double(double)> &fn, std::ofstream &csvfile) {
+            double integrate, total_area;
+
+            //integrate
+            for (const auto &fd: cci) {
+                auto area = PMP::face_area(fd, tmesh_);
+                //value of gaussian -- interpolate properly or not
+                auto KG = 0.;
+                auto count = 0;
+                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
+                     vbegin != vend;
+                     ++vbegin, ++count) {
+                    KG += get(gcurv, *vbegin);
+                    const auto pt = get(CGAL::vertex_point, tmesh_, *vbegin);
+                    csvfile << pt[0] << ", " << pt[1] << "," << pt[2] << std::endl;
+                }
+
+                KG /= count;
+                integrate += std::fabs(area) * KG;
+                total_area += std::fabs(area);
+
+            }
+
+            std::cout << "," << integrate << "," << total_area << std::endl;
             return fn(integrate);
-
-            //NOTE
-//            PMP::face_area(f,tmesh_);
-
         }
 
         void build_tree(const std::vector<Point> &pts) {
@@ -547,9 +627,6 @@ namespace ccpm {
         double tags_projection(const Point &pt) {
 
             //for n-values
-//            std::cout << "Projecting for point : " << pt[0] << ", "
-//                      << pt[1] << ", "
-//                      << pt[2] << "... \n";
             K_neighbor_search search(*ptree_, pt/*query*/, 25/*nb nearest neigh*/ , 0, true, *p_tr_dist_);
             auto const &pts = p_tr_dist_->point_property_map().points;
             //get max over the 3-closest points
@@ -805,7 +882,7 @@ namespace ccpm {
         void gather_fitting_points(const Triangle_mesh &m, vertex_descriptor vd,
                                    std::vector<Point> &in_points,
                                    Vertex_PM_type &vpm) {
-//container to collect vertices of v on the PolyhedralSurf
+            //container to collect vertices of v on the PolyhedralSurf
             std::vector<vertex_descriptor> gathered;
             //initialize
             in_points.clear();
@@ -855,11 +932,6 @@ namespace ccpm {
 
         }
 
-    public:
-        //conversion function
-        const vector<Kernel::Vector_3> &get_normal() const {
-            return normal;
-        }
     };
 
 }//end namespace mema
