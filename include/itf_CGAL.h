@@ -474,12 +474,30 @@ namespace ccpm {
 
                             if (fd != Triangle_mesh::null_face()) {
 
-                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+/*                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
                                 for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
                                      vbegin != vend;
                                      ++vbegin) {
                                     vvec[component[*vbegin]].insert(fd);
+                                }*/
+
+
+                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+                                std::vector<vertex_descriptor> tmp;
+                                bool allBoundary = true;
+                                int c;
+                                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
+                                     vbegin != vend;
+                                     c = component[*vbegin],++vbegin) {
+
+                                    allBoundary &= (component[*vbegin] == c);
+                                    tmp.push_back(*vbegin);
                                 }
+                                if(allBoundary)
+                                    vvec[component[tmp[0]]].insert(fd);
+                                tmp.clear();
+
+
                             }
                         }
 
@@ -520,6 +538,29 @@ namespace ccpm {
         void build_triple_map() {
             bool created;
             boost::tie(triple_map_, created) = tmesh_.add_property_map<vertex_descriptor, double>("v:triple", 0);
+            static constexpr double TRIPLE_VALUE = 510;
+
+//             BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
+//
+//                bool allBoundary = true;
+//                std::vector<vertex_descriptor> tmp;
+//                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+//                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
+//                     vbegin != vend;
+//                     ++vbegin) {
+//                        allBoundary &= (tags_projection(get(CGAL::vertex_point, tmesh_, *vbegin)) == TRIPLE_VALUE);
+//                        tmp.push_back(*vbegin);
+//                }
+//                //
+//                if(allBoundary) {
+//                    for (auto vd: tmp) {
+//                        get(triple_map_, vd) = tags_projection(get(CGAL::vertex_point, tmesh_, vd));
+//                    }
+//                }
+//                tmp.clear();
+//
+//             }
+//
 
             BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
                             get(triple_map_, vd) = tags_projection(get(CGAL::vertex_point, tmesh_, vd));
