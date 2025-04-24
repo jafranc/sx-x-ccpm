@@ -251,4 +251,4 @@ add_executable(${exe} ${ccpm_src})
 target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads Ceres::ceres CGAL::Ceres_support CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
 
 #tests
-#add_subdirectory (tests)
+add_subdirectory (tests)

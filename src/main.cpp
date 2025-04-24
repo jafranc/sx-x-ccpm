@@ -32,6 +32,7 @@ int main(int argc, const char **argv) {
                     ("i,image", "image file name", cxxopts::value<std::string>())
                     ("n,ncoords", "neighborhood coord file name", cxxopts::value<std::string>())
                     ("v,isoval", "isovalues at which isolate phases", cxxopts::value<std::vector<int>>())
+                    ("x,cutoff", "isovalues above which cutoff the boundary", cxxopts::value<double>())
                     ("t,test", "testing", cxxopts::value<int>())//left in non-production
                     ("a,test-angle", "testing-ange", cxxopts::value<std::vector<double>>())//left in non-production
                     ("r,test-rot", "testing-rot", cxxopts::value<std::vector<double>>())//left in non-production
@@ -92,6 +93,7 @@ int main(int argc, const char **argv) {
                 options_parsed["ard"].as<std::vector<double>>()[1],
                 options_parsed["ard"].as<std::vector<double>>()[2]);
 
+        Itf2.set_cutoff(options_parsed["cutoff"].as<double>());
         Itf2.save_surf_stl(boost::filesystem::path(output_dir / (std::get<1>(names) + (".stl"))).c_str());
     } else
         throw std::invalid_argument("Output directory required");
