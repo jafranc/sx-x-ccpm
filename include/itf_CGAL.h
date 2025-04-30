@@ -53,21 +53,18 @@
 #include "../tpl/cgal/STL_Extension/include/CGAL/array.h"
 #include "Poly_rings.h"
 
-//#include <CGAL/natural_neighbor_coordinates_3.h>
-//#include <CGAL/surface_neighbor_coordinates_3.h>
-//#include <CGAL/interpolation_functions.h>
 #include <CGAL/Search_traits_3.h>
 #include <CGAL/Search_traits_adapter.h>
 #include <CGAL/Orthogonal_k_neighbor_search.h>
 
 #include "Utilities.hpp"
+//CC
 #include <boost/graph/connected_components.hpp>
+#include <boost/graph/incremental_components.hpp>
 
 namespace PMP = CGAL::Polygon_mesh_processing;
-//TODO refactor itf around Porjector Slicer I/O and Refiner classes
-//TODO longer Bezier fitting impl
-namespace ccpm {
 
+namespace ccpm {
 
 /***
  * Interface template class which
@@ -98,16 +95,14 @@ namespace ccpm {
         typedef CGAL::Surface_mesh<Point> Triangle_mesh;
         //for interpolant
         typedef std::map<Point, double, Kernel::Less_xyz_3> CGAL_map;
-//        typedef CGAL::Data_access<CGAL_map> CGAL_mapgetter;
         typedef std::vector<std::pair<Point, double> > PDVec;
 
         typedef boost::graph_traits<Triangle_mesh>::vertex_descriptor vertex_descriptor;
+        typedef boost::graph_traits<Triangle_mesh>::vertices_size_type vertex_index;
         typedef boost::graph_traits<Triangle_mesh>::edge_descriptor edge_descriptor;
         typedef boost::graph_traits<Triangle_mesh>::face_descriptor face_descriptor;
 
         //curvature meas.
-        typedef CGAL::Monge_via_jet_fitting<Kernel> Monge_via_jet_fitting;
-        typedef Monge_via_jet_fitting::Monge_form Monge_form;
         typedef Triangle_mesh::Property_map<vertex_descriptor, int> Vertex_PM_type;
         typedef Triangle_mesh::Property_map <vertex_descriptor, std::vector<double>> Curvature_PM_type;
 
@@ -116,7 +111,6 @@ namespace ccpm {
 
         //for local refinement
         //TODO look at what was there and what/why we extracted from
-//    typedef T_PolyhedralSurf_rings<Triangle_mesh, Vertex_PM_type > Poly_rings
         typedef Poly_rings<Triangle_mesh, Vertex_PM_type> Poly_rings_def;
 
 
@@ -163,7 +157,6 @@ namespace ccpm {
         } ref_params; //TODO clear up
 
         //for plane least suqare fitting
-//        typedef Kernel::Line_2 Line;
         //Bezier
         typedef CGAL::CORE_algebraic_number_traits Nt_traits;
         typedef Nt_traits::Rational NT;
@@ -171,11 +164,8 @@ namespace ccpm {
         typedef Nt_traits::Algebraic Algebraic;
         typedef CGAL::Cartesian<Rational> Rat_kernel;
         typedef CGAL::Cartesian<Algebraic> Alg_kernel;
-//        typedef Rat_kernel::Point_2 Rat_point;
         typedef CGAL::Arr_Bezier_curve_traits_2<Rat_kernel, Alg_kernel, Nt_traits>
                 BTraits;
-//        typedef Traits::X_monotone_curve_2 Bezier_x_monotone_curve;
-//        typedef Traits::Curve_2 Bezier_curve;
         typedef CGAL::Arrangement_2<BTraits> Arrangement;
 
     private:
@@ -191,7 +181,8 @@ namespace ccpm {
     public:
 
         itf_to_CGAL() : c2t3_(tr_), processed_sm_(false),
-                        processed_refined_(false), do_refined_(false) {
+                        processed_refined_(false), do_refined_(false),
+                        logfile("/tmp/log.ccpm.cgal") {
             fname_ = "";
             //min_edge_length_ = 0.0;
 
@@ -211,7 +202,7 @@ namespace ccpm {
             input_.read(fname_);
         }
 
-        void set_cutoff(double cval){
+        void set_cutoff(double cval) {
             TRIPLE_VALUE = cval;
         }
 
@@ -257,21 +248,13 @@ namespace ccpm {
 
         }
 
-
-        //TODO improve constness
-        const C2t3 &get_surfmesh() {
-            //do some processing
-            process_mesh();
-            return c2t3_;
-        }
-
         const itf_to_CGAL &save_surf_off(const char *fname) {
             process_mesh();
-            std::cerr << "\t [completed]\n";
+            logfile << "\t [completed]\n";
             std::ofstream out(fname);
             CGAL::output_surface_facets_to_off(out, c2t3_);
 
-            std::cout << "\n Final number of points: " << tr_.number_of_vertices() << "\n";
+            logfile << "\n Final number of points: " << tr_.number_of_vertices() << "\n";
 
             return *this;
         }
@@ -280,7 +263,6 @@ namespace ccpm {
         const itf_to_CGAL &save_surf_stl(const char *fname) {
 
             //prep for
-
             //prep for STL
             string v = "stl";
             auto sname = std::string(fname);
@@ -300,29 +282,30 @@ namespace ccpm {
                 std::ofstream out(fname, std::ios::binary), csvfile(prefix + (".csv"));
                 CGAL::IO::write_STL(out, tmesh_);
 
+                //for n-values
+                auto [mcurv, gcurv] = process_curvature();
+
                 PDVec coords;
                 std::vector<Point> pts;
                 for (const auto pd: m_F)
                     pts.push_back(pd.first);
-                //for n-values
-                auto [mcurv, gcurv] = process_curvature();
-
                 //produce angles
                 build_tree(pts);
 
-                std::cout << " angle :: label, numel, euler, iv, area \n";
+                logfile << " angle :: label, numel, euler, iv, area \n";
                 auto vvec = process_triple_contact();
                 for (const auto &[k, v]: vvec.first) {
                     const auto &map = vvec.second[k];//is the set of faces
                     auto euler = v;
-                    if (map.size() > 1) {
-                        std::ofstream basicOfstream( std::string(prefix+"csvfile_" + std::to_string(k) + ".csv").c_str() );
+                    if (map.size() > 0) {
+                        std::ofstream basicOfstream(
+                                std::string(prefix + "csvfile_" + std::to_string(k) + ".csv").c_str());
                         basicOfstream << " # x, y ,z \n";
-                        std::cout << k << ", " << map.size()
-                                  << "," << euler << ", "
-                                  << get_angle(map, gcurv, [euler](double t) {
-                                      return acos((2 * euler * M_PI - t) / 2. / M_PI - 1.) * 180 / M_PI;
-                                  }, basicOfstream) << std::endl;
+                        logfile << k << ", " << map.size()
+                                << "," << euler << ", "
+                                << get_angle(map, gcurv, [](double t) {
+                                    return acos((2 * 2 * M_PI - t) / 2. / M_PI - 1.) * 180 / M_PI;
+                                }, basicOfstream) << std::endl;
                     }
 
                 }
@@ -344,7 +327,7 @@ namespace ccpm {
                     csvfile << tags_projection(pt) << "," << euler << std::endl;
 
                 }
-                std::cout << "Final number of points: " << tr_.number_of_vertices() << "\n";
+                logfile << "Final number of points: " << tr_.number_of_vertices() << "\n";
             } else
                 throw std::exception();
             return *this;
@@ -354,10 +337,10 @@ namespace ccpm {
             std::ifstream input(fname);
             input >> tmesh_;
 
-            std::cout << "Mesh Info : number of vertices " << tmesh_.number_of_vertices() << std::endl;
-            std::cout << "Mesh Info : number of edges " << tmesh_.number_of_edges() << std::endl;
-            std::cout << "Mesh Info : number of half-edges " << tmesh_.number_of_halfedges() << std::endl;
-            std::cout << "Mesh Info : number of faces " << tmesh_.number_of_faces() << std::endl;
+            logfile << "Mesh Info : number of vertices " << tmesh_.number_of_vertices() << std::endl;
+            logfile << "Mesh Info : number of edges " << tmesh_.number_of_edges() << std::endl;
+            logfile << "Mesh Info : number of half-edges " << tmesh_.number_of_halfedges() << std::endl;
+            logfile << "Mesh Info : number of faces " << tmesh_.number_of_faces() << std::endl;
 
             return *this;
         }
@@ -380,7 +363,9 @@ namespace ccpm {
         std::unique_ptr<Tree> ptree_;
         std::unique_ptr<Distance> p_tr_dist_;
 
-    private:
+        std::ofstream logfile;
+
+        typedef boost::component_index<int> Components;
         //double min_edge_length_;
         bool processed_sm_, processed_refined_;
 
@@ -417,10 +402,10 @@ namespace ccpm {
                                                                    m_distance_);
 
 
-                std::cout << "Using parameters:\n \t angle: "
-                          << m_angle_ << "\n\t radius: "
-                          << m_radius_ << "\n\t distance: "
-                          << m_distance_ << std::endl;
+                logfile << "Using parameters:\n \t angle: "
+                        << m_angle_ << "\n\t radius: "
+                        << m_radius_ << "\n\t distance: "
+                        << m_distance_ << std::endl;
 
                 // meshing surface, with the "manifold without boundary" algorithm
                 //the output mesh is guaranteed to be a manifold surface without boundary
@@ -430,22 +415,14 @@ namespace ccpm {
                 //the output mesh is guaranteed to be manifold but may have boundaries.
 //                CGAL::make_surface_mesh(c2t3_, surface, criteria, CGAL::Manifold_with_boundary_tag(),350);
 
-
-
                 ref_params.faired = true;
                 if (ref_params.faired) {
-
-
                     std::vector<vertex_descriptor> in_points;
                     BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
                                     in_points.push_back(vd);
                                 }
-
-
                     bool success = CGAL::Polygon_mesh_processing::fair(tmesh_, in_points);
-
                 }
-
                 processed_sm_ = true;
             }
         }
@@ -460,59 +437,88 @@ namespace ccpm {
 
             //try #2 -- build filtered graph on triple value
             Is_triple filter(triple_map_, tmesh_, TRIPLE_VALUE);
-            boost::filtered_graph<Triangle_mesh, Is_triple , Is_triple> filtered_mesh(tmesh_, filter, filter);
+            boost::filtered_graph<Triangle_mesh, Is_triple, Is_triple> filtered_mesh(tmesh_, filter, filter);
             // compute cc
-            std::vector<int> component(num_vertices(filtered_mesh));
-            std::cout << " Filtering ... " << num_edges(filtered_mesh) << " / " << tmesh_.num_edges() << std::endl;
-            int numCC = boost::connected_components(filtered_mesh, &component[0]);
-            std::cout << " number of CC : " << numCC << std::endl;
+//            std::vector<int> component(num_vertices(filtered_mesh));
+            std::vector<vertex_index> rank(num_vertices(filtered_mesh));
+            std::vector<vertex_descriptor> parent(num_vertices(filtered_mesh),vertex_descriptor{0});
+            BOOST_FOREACH(vertex_descriptor vd, vertices(filtered_mesh)) {
+                            if (Triangle_mesh::null_vertex() != vd)
+                                parent[vd] = vd;
 
+                        }
+//            int numCC = boost::connected_components(filtered_mesh, &component[0]);
+//            logfile << " number of CC : " << numCC << std::endl;
+            boost::disjoint_sets ds(&rank[0], &parent[0]);
+            boost::incremental_components(filtered_mesh, ds);
+            Components comp(parent.begin(), parent.end());
+            vertex_index numCC = 0;
+            BOOST_FOREACH(vertex_index cd, comp) {
+                            numCC = std::max(numCC, cd);
+                        }
+            logfile << " number of CC : " << numCC << std::endl;
+            logfile << " max rank : " << *std::max_element(rank.begin(),rank.end()) << " for  parents " <<
+            parent[std::distance(rank.begin(),std::max_element(rank.begin(),rank.end()))] << std::endl;
             //stack faces around vertices
-            BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
-
-                            if (fd != Triangle_mesh::null_face()) {
-//overlapping option
-                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
-                                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
-                                     vbegin != vend;
-                                     ++vbegin) {
-
-                                        if(filter(*vbegin))
-                                            vvec[component[*vbegin]].insert(fd);
-                                }
-
-// exclusive option
+//            BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
+//
+//                            if (fd != Triangle_mesh::null_face()) {
+////overlapping option
 //                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
-//                                std::vector<vertex_descriptor> tmp;
-//                                bool allBoundary = true;
-//                                int c;
 //                                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
 //                                     vbegin != vend;
-//                                     c = component[*vbegin],++vbegin) {
+//                                     ++vbegin) {
 //
-//                                    allBoundary &= (component[*vbegin] == c);
-//                                    tmp.push_back(*vbegin);
+//                                    if (filter(*vbegin))
+//                                        vvec[component[*vbegin]].insert(fd);
 //                                }
-//                                if(allBoundary)
-//                                    vvec[component[tmp[0]]].insert(fd);
-//                                tmp.clear();
+//
+//// exclusive option
+////                                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+////                                std::vector<vertex_descriptor> tmp;
+////                                bool allBoundary = true;
+////                                int c;
+////                                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
+////                                     vbegin != vend;
+////                                     c = component[*vbegin],++vbegin) {
+////
+////                                    allBoundary &= (component[*vbegin] == c);
+////                                    tmp.push_back(*vbegin);
+////                                }
+////                                if(allBoundary)
+////                                    vvec[component[tmp[0]]].insert(fd);
+////                                tmp.clear();
+//                            }
+//                        }
+            BOOST_FOREACH(vertex_index cd, comp) {
+                            CGAL::Face_around_target_iterator<Triangle_mesh> fbegin, fend;
+                            BOOST_FOREACH(vertex_index cc, comp[cd]) {
+                                            auto vd = vertex_descriptor{cc};
+                                            if (filter(vd)) {
+                                                for (boost::tie(fbegin, fend) = faces_around_target(
+                                                        tmesh_.halfedge(vd), tmesh_);
+                                                     fbegin != fend;
+                                                     ++fbegin) {
+                                                    vvec[cd].insert(*fbegin);
 
-
-                            }
+                                                }
+                                            }
+                                        }
                         }
 
-            for (int i = 0; i < numCC; ++i) {
+
+            for (int i = 1; i <= numCC; ++i) {
 
                 auto [nv, ne] = filtered_by_component(vvec[i]);
                 uintmax_t nf = vvec[i].size();
                 intmax_t euler = nv - ne + nf;
-//                auto euler = 2;
                 eulers[i] = euler;//tell you is ribbon is cut or perforated
 
             }
 
             return std::make_pair<std::unordered_map<int, int>,
-                    std::unordered_map<int, std::set<face_descriptor>>>(std::move(eulers), std::move(vvec));
+                    std::unordered_map<int, std::set<face_descriptor>>>(std::move(eulers),
+                                                                        std::move(vvec));
         }
 
         std::pair<int, int> filtered_by_component(const std::set<face_descriptor> &face_set) {
@@ -538,28 +544,6 @@ namespace ccpm {
         void build_triple_map() {
             bool created;
             boost::tie(triple_map_, created) = tmesh_.add_property_map<vertex_descriptor, double>("v:triple", 0);
-//            static constexpr double TRIPLE_VALUE = 5.1;
-//             BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
-//
-//                bool allBoundary = true;
-//                std::vector<vertex_descriptor> tmp;
-//                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
-//                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
-//                     vbegin != vend;
-//                     ++vbegin) {
-//                        allBoundary &= (tags_projection(get(CGAL::vertex_point, tmesh_, *vbegin)) == TRIPLE_VALUE);
-//                        tmp.push_back(*vbegin);
-//                }
-//                //
-//                if(allBoundary) {
-//                    for (auto vd: tmp) {
-//                        get(triple_map_, vd) = tags_projection(get(CGAL::vertex_point, tmesh_, vd));
-//                    }
-//                }
-//                tmp.clear();
-//
-//             }
-//
 
             BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
                             get(triple_map_, vd) = tags_projection(get(CGAL::vertex_point, tmesh_, vd));
@@ -571,23 +555,24 @@ namespace ccpm {
 
             Is_triple() {};
 
-            Is_triple(Triangle_mesh::Property_map<vertex_descriptor, double> mapin, const Triangle_mesh &tm, double tv)
+            Is_triple(const Triangle_mesh::Property_map<vertex_descriptor, double> &mapin, const Triangle_mesh &tm,
+                      double tv)
                     : m_tag_values(mapin), m_tm(tm), m_tv(tv) {};
             Triangle_mesh::Property_map<vertex_descriptor, double> m_tag_values;
             Triangle_mesh m_tm;
             double m_tv;
-//            static constexpr double TRIPLE_VALUE = 510;
 
             bool operator()(const vertex_descriptor &vd) const {
-
-                return get(m_tag_values, vd) >= m_tv;
+                bool is_triple = get(m_tag_values, vd) >= m_tv;
+                return is_triple;
             }
 
             bool operator()(const edge_descriptor &ed) const {
 
                 auto vds = source(ed, m_tm), vdt = target(ed, m_tm);
-                return (get(m_tag_values, vds) >= m_tv) &&
-                       (get(m_tag_values, vdt) >= m_tv);
+                return this->operator()(vds) && this->operator()(vdt);
+//                return (get(m_tag_values, vds) >= m_tv) &&
+//                       (get(m_tag_values, vdt) >= m_tv);
             }
 
         };
@@ -610,16 +595,13 @@ namespace ccpm {
                         if (vd == *vbegin)
                             return true;
                     }
-
                 }
-
                 return false;
             }
 
             bool operator()(const edge_descriptor &ed) const {
 
                 auto vds = source(ed, m_tm), vdt = target(ed, m_tm);
-
                 return this->operator()(vds) && this->operator()(vdt);
             }
         };
@@ -650,13 +632,13 @@ namespace ccpm {
 
             }
 
-            std::cout << "," << integrate << "," << total_area << std::endl;
+            logfile << "," << integrate << "," << total_area << std::endl;
             return fn(integrate);
         }
 
         void build_tree(const std::vector<Point> &pts) {
 
-            std::cout << "Building neighboring tree ... \n";
+            logfile << "Building neighboring tree\n";
             Image_point_property_map ppmap(pts);
             ptree_ = std::make_unique<Tree>(boost::counting_iterator<std::size_t>(0),
                                             boost::counting_iterator<std::size_t>(pts.size()),
@@ -680,6 +662,7 @@ namespace ccpm {
         }
 
         std::pair<CurvatureMaps_type, CurvatureMaps_type> process_curvature() {
+            logfile << " Processing curvature \n";
             CurvatureMaps_type mcurv, gcurv;
             bool created;
 
@@ -702,7 +685,8 @@ namespace ccpm {
             Curvature_PM_type cpm;
             bool created;
             std::vector<double> delta;
-            boost::tie(cpm, created) = tmesh_.add_property_map<vertex_descriptor, std::vector<double>>("v:cpm", {0, 0});
+            boost::tie(cpm, created) = tmesh_.add_property_map<vertex_descriptor, std::vector<double>>("v:cpm",
+                                                                                                       {0, 0});
 //            assert(created);
 
             if (true) //ref_paramas.smoothing
@@ -716,7 +700,7 @@ namespace ccpm {
                     if (get(eif, e))
                         ++sharp_counter;
 
-                std::cout << "\n" << sharp_counter << " sharp edges" << std::endl;
+                logfile << "\n" << sharp_counter << " sharp edges" << std::endl;
 
                 int nb_iterations = 30;
                 PMP::angle_and_area_smoothing(tmesh_, CGAL::parameters::number_of_iterations(nb_iterations)
@@ -737,11 +721,6 @@ namespace ccpm {
 
 
                     std::vector<vertex_descriptor> point_from_faces;
-//                BOOST_FOREACH(face_descriptor fd, inside_faces)
-//                                BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(tmesh_.halfedge(fd),
-//                                                                                         tmesh_))
-//                                                                                         point_from_faces.push_back(
-//                                                        vd);
 
                     for (auto ed: boost::make_iterator_range(edges(tmesh_))) {
                         if (get(eif, ed)) {
@@ -762,159 +741,159 @@ namespace ccpm {
                 faired_off.close();
             }
 
-          /*  if (!processed_refined_) {
+            /*  if (!processed_refined_) {
 
-                std::cout << " Analyzing refinement \n";
+                  std::cout << " Analyzing refinement \n";
 
-                std::set<face_descriptor> selected_faces;
+                  std::set<face_descriptor> selected_faces;
 
-                unsigned int nb_vertices_considered = 0;
-                Vertex_PM_type vpm;
-                boost::tie(vpm, created) = tmesh_.add_property_map<vertex_descriptor, int>("v:vpm", -1);
-                assert(created);
-
-
-                double mean_delta = 0.0;
-
-                //filter inside BBox
-                std::vector<Point> in_points;  //container for data points
-                BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
-                                in_points.push_back(get(CGAL::vertex_point, tmesh_, vd));
-                            }
-                Kernel::Iso_cuboid_3 c3 = CGAL::bounding_box(in_points.begin(), in_points.end());
-                in_points.clear();
-                // second arg is epsilon detection
-                std::set<face_descriptor> inside_faces = inside_face(c3, epsilon_box, tmesh_);
+                  unsigned int nb_vertices_considered = 0;
+                  Vertex_PM_type vpm;
+                  boost::tie(vpm, created) = tmesh_.add_property_map<vertex_descriptor, int>("v:vpm", -1);
+                  assert(created);
 
 
-                //gathering faces
-                BOOST_FOREACH(face_descriptor f, inside_faces)
-                                BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(tmesh_.halfedge(f), tmesh_)) {
-                                                in_points.clear();
-                                                //gather points around the vertex using rings
-                                                gather_fitting_points(tmesh_, vd, in_points, vpm);
-                                                //skip if the nb of points is to small
-                                                if (in_points.size() < ref_params.min_nb_points) {
-                                                    std::cerr << "not enough pts for fitting this vertex"
-                                                              << in_points.size() << std::endl;
-                                                    vd++;
-                                                }
+                  double mean_delta = 0.0;
 
-                                                Monge_form monge_form;
-                                                Monge_via_jet_fitting monge_fit;
-                                                monge_form = monge_fit(in_points.begin(), in_points.end(),
-                                                                       ref_params.d_fitting,
-                                                                       ref_params.d_monge);
-                                                //verbose txt output
-                                                if (ref_params.verbose) {
-                                                    std::vector<Point>::iterator itbp = in_points.begin(), itep = in_points.end();
-//                                                    std::cout << "in_points list : " << std::endl;
-//                                                    for (; itbp != itep; itbp++) std::cout << *itbp << std::endl;
-                                                    std::cout << "--- vertex " << ++nb_vertices_considered
-                                                              << " : " << get(CGAL::vertex_point, tmesh_, vd)
-                                                              << std::endl
-                                                              << "number of points used : " << in_points.size()
-                                                              << std::endl
-                                                              //<< monge_form << std::endl
-                                                              << "coeff: " <<
-                                                              monge_form.coefficients()[0] << " "
-                                                              << monge_form.coefficients()[1]
-                                                              << std::endl;
-                                                }
-                                                delta.push_back(
-                                                        monge_form.coefficients()[0] * monge_form.coefficients()[0] +
-                                                        monge_form.coefficients()[1] * monge_form.coefficients()[1]);
-
-                                                cpm[vd] = monge_form.coefficients();//CUP
+                  //filter inside BBox
+                  std::vector<Point> in_points;  //container for data points
+                  BOOST_FOREACH(vertex_descriptor vd, tmesh_.vertices()) {
+                                  in_points.push_back(get(CGAL::vertex_point, tmesh_, vd));
+                              }
+                  Kernel::Iso_cuboid_3 c3 = CGAL::bounding_box(in_points.begin(), in_points.end());
+                  in_points.clear();
+                  // second arg is epsilon detection
+                  std::set<face_descriptor> inside_faces = inside_face(c3, epsilon_box, tmesh_);
 
 
-                                            }
+                  //gathering faces
+                  BOOST_FOREACH(face_descriptor f, inside_faces)
+                                  BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(tmesh_.halfedge(f), tmesh_)) {
+                                                  in_points.clear();
+                                                  //gather points around the vertex using rings
+                                                  gather_fitting_points(tmesh_, vd, in_points, vpm);
+                                                  //skip if the nb of points is to small
+                                                  if (in_points.size() < ref_params.min_nb_points) {
+                                                      std::cerr << "not enough pts for fitting this vertex"
+                                                                << in_points.size() << std::endl;
+                                                      vd++;
+                                                  }
 
-                mean_delta = 1.0 / delta.size() * std::accumulate(delta.begin(), delta.end(), 0.0);
-                std::cout << "refinement -- mean delta :" << mean_delta << std::endl;
-
-                //now put face in bucket
-                if (do_actually_refine) {
-                    BOOST_FOREACH(face_descriptor f, inside_faces)
-                                    BOOST_FOREACH(vertex_descriptor vd,
-                                                  vertices_around_face(tmesh_.halfedge(f), tmesh_)) {
-                                                    in_points.clear();
-                                                    //gather points around the vertex using rings
-                                                    gather_fitting_points(tmesh_, vd, in_points, vpm);
-                                                    //skip if the nb of points is to small
-                                                    if (in_points.size() < ref_params.min_nb_points) {
-                                                        std::cerr
-                                                                << "not enough pts for fitting this vertex"
-                                                                << in_points.size()
+                                                  Monge_form monge_form;
+                                                  Monge_via_jet_fitting monge_fit;
+                                                  monge_form = monge_fit(in_points.begin(), in_points.end(),
+                                                                         ref_params.d_fitting,
+                                                                         ref_params.d_monge);
+                                                  //verbose txt output
+                                                  if (ref_params.verbose) {
+                                                      std::vector<Point>::iterator itbp = in_points.begin(), itep = in_points.end();
+  //                                                    std::cout << "in_points list : " << std::endl;
+  //                                                    for (; itbp != itep; itbp++) std::cout << *itbp << std::endl;
+                                                      std::cout << "--- vertex " << ++nb_vertices_considered
+                                                                << " : " << get(CGAL::vertex_point, tmesh_, vd)
+                                                                << std::endl
+                                                                << "number of points used : " << in_points.size()
+                                                                << std::endl
+                                                                //<< monge_form << std::endl
+                                                                << "coeff: " <<
+                                                                monge_form.coefficients()[0] << " "
+                                                                << monge_form.coefficients()[1]
                                                                 << std::endl;
-                                                        vd++;
-                                                    }
+                                                  }
+                                                  delta.push_back(
+                                                          monge_form.coefficients()[0] * monge_form.coefficients()[0] +
+                                                          monge_form.coefficients()[1] * monge_form.coefficients()[1]);
 
-                                                    Monge_form monge_form;
-                                                    Monge_via_jet_fitting monge_fit;
-                                                    monge_form = monge_fit(in_points.begin(), in_points.end(),
-                                                                           ref_params.d_fitting, ref_params.d_monge);
-                                                    //verbose txt output
-                                                    if (ref_params.verbose) {
-                                                        std::vector<Point>::iterator itbp = in_points.begin(), itep = in_points.end();
-                                                        std::cout << "in_points list : " << std::endl;
-//                                                    for (; itbp != itep; itbp++) std::cout << *itbp << std::endl;
-                                                        std::cout << "--- vertex " << ++nb_vertices_considered
-                                                                  << " : " << get(CGAL::vertex_point, tmesh_, vd)
-                                                                  << std::endl
-                                                                  << "number of points used : " << in_points.size()
-                                                                  << std::endl
-                                                                  << " monge cdt : " << monge_fit.condition_number()
-                                                                  << std::endl
-                                                                  //<< monge_form << std::endl
-                                                                  << "coeff: " <<
-                                                                  monge_form.coefficients()[0] << " "
-                                                                  << monge_form.coefficients()[1]
+                                                  cpm[vd] = monge_form.coefficients();//CUP
+
+
+                                              }
+
+                  mean_delta = 1.0 / delta.size() * std::accumulate(delta.begin(), delta.end(), 0.0);
+                  std::cout << "refinement -- mean delta :" << mean_delta << std::endl;
+
+                  //now put face in bucket
+                  if (do_actually_refine) {
+                      BOOST_FOREACH(face_descriptor f, inside_faces)
+                                      BOOST_FOREACH(vertex_descriptor vd,
+                                                    vertices_around_face(tmesh_.halfedge(f), tmesh_)) {
+                                                      in_points.clear();
+                                                      //gather points around the vertex using rings
+                                                      gather_fitting_points(tmesh_, vd, in_points, vpm);
+                                                      //skip if the nb of points is to small
+                                                      if (in_points.size() < ref_params.min_nb_points) {
+                                                          std::cerr
+                                                                  << "not enough pts for fitting this vertex"
+                                                                  << in_points.size()
                                                                   << std::endl;
-                                                    }
-                                                    if (monge_form.coefficients()[0] * monge_form.coefficients()[0] +
-                                                        monge_form.coefficients()[1] * monge_form.coefficients()[1] >
-                                                        curvature_ratio * mean_delta) {
-                                                        selected_faces.insert(f);
-                                                        BOOST_FOREACH(face_descriptor fi,
-                                                                      faces_around_face(tmesh_.halfedge(f),
-                                                                                        tmesh_)) selected_faces.insert(
-                                                                                fi);
-                                                    }
-                                                }
+                                                          vd++;
+                                                      }
 
-                    //refining faces
-                    if (ref_params.isotropic) {
-                        PMP::isotropic_remeshing(
-                                selected_faces,
-                                1.,
-                                tmesh_);
-                    } else {
-                        std::vector<face_descriptor> new_faces;
-                        std::vector<vertex_descriptor> new_vertices;
+                                                      Monge_form monge_form;
+                                                      Monge_via_jet_fitting monge_fit;
+                                                      monge_form = monge_fit(in_points.begin(), in_points.end(),
+                                                                             ref_params.d_fitting, ref_params.d_monge);
+                                                      //verbose txt output
+                                                      if (ref_params.verbose) {
+                                                          std::vector<Point>::iterator itbp = in_points.begin(), itep = in_points.end();
+                                                          std::cout << "in_points list : " << std::endl;
+  //                                                    for (; itbp != itep; itbp++) std::cout << *itbp << std::endl;
+                                                          std::cout << "--- vertex " << ++nb_vertices_considered
+                                                                    << " : " << get(CGAL::vertex_point, tmesh_, vd)
+                                                                    << std::endl
+                                                                    << "number of points used : " << in_points.size()
+                                                                    << std::endl
+                                                                    << " monge cdt : " << monge_fit.condition_number()
+                                                                    << std::endl
+                                                                    //<< monge_form << std::endl
+                                                                    << "coeff: " <<
+                                                                    monge_form.coefficients()[0] << " "
+                                                                    << monge_form.coefficients()[1]
+                                                                    << std::endl;
+                                                      }
+                                                      if (monge_form.coefficients()[0] * monge_form.coefficients()[0] +
+                                                          monge_form.coefficients()[1] * monge_form.coefficients()[1] >
+                                                          curvature_ratio * mean_delta) {
+                                                          selected_faces.insert(f);
+                                                          BOOST_FOREACH(face_descriptor fi,
+                                                                        faces_around_face(tmesh_.halfedge(f),
+                                                                                          tmesh_)) selected_faces.insert(
+                                                                                  fi);
+                                                      }
+                                                  }
 
-                        PMP::refine(tmesh_,
-                                    selected_faces,
-                                    std::back_inserter(new_faces),
-                                    std::back_inserter(new_vertices),
-                                    CGAL::Polygon_mesh_processing::parameters::density_control_factor(5.));
+                      //refining faces
+                      if (ref_params.isotropic) {
+                          PMP::isotropic_remeshing(
+                                  selected_faces,
+                                  1.,
+                                  tmesh_);
+                      } else {
+                          std::vector<face_descriptor> new_faces;
+                          std::vector<vertex_descriptor> new_vertices;
 
-                    }
+                          PMP::refine(tmesh_,
+                                      selected_faces,
+                                      std::back_inserter(new_faces),
+                                      std::back_inserter(new_vertices),
+                                      CGAL::Polygon_mesh_processing::parameters::density_control_factor(5.));
 
-                    //DEBUG
-                    if (dbg_lvl > 1) {
-                        std::ofstream refined_off("refined.off");
-                        refined_off.precision(17);
-                        refined_off << tmesh_;
-                        refined_off.close();
-                    }
+                      }
+
+                      //DEBUG
+                      if (dbg_lvl > 1) {
+                          std::ofstream refined_off("refined.off");
+                          refined_off.precision(17);
+                          refined_off << tmesh_;
+                          refined_off.close();
+                      }
 
 
-                }// end of do_actually_refined
+                  }// end of do_actually_refined
 
-                processed_refined_ = true;
-            }
-*/
+                  processed_refined_ = true;
+              }
+  */
             return cpm;
 
         }
@@ -957,7 +936,7 @@ namespace ccpm {
             zmin = c.zmin() + eps;
             zmax = c.zmax() - eps;
 
-            std::cout << " Bounding box " << c << std::endl;
+            logfile << " Bounding box " << c << std::endl;
 
             BOOST_FOREACH(face_descriptor fd, m.faces()) {
                             BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(m.halfedge(fd), m)) {

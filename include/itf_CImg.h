@@ -32,9 +32,9 @@ namespace ccpm {
     class itf_to_CImg {
 
     public:
-        itf_to_CImg() : processed_(false) {
+        itf_to_CImg() : processed_(false),logfile("/tmp/log.ccpm.cimg") {
             fname_ = "";
-            std::cout << "using itf to CImg template default ctor instantiation \n";
+            logfile << "using itf to CImg template default ctor instantiation \n";
         }
 
         void set_input(const char *fname) {
@@ -51,7 +51,7 @@ namespace ccpm {
             std::ofstream csv(prefix + ("mapping.csv"));
             csv << "x,y,z,n\n";
             auto grad = input_.get_gradient();
-            std::cout << "\n Mapping  info : " << grad.size() << " " << grad.max() << " " << grad.min() << std::endl;
+            logfile << "\n Mapping  info : " << grad.size() << " " << grad.max() << " " << grad.min() << std::endl;
 
             cimg_forXYZC(input_, x, y, z, c) {
                             const uint64_t pos = input_.offset(x, y, z, c);
@@ -108,18 +108,8 @@ namespace ccpm {
                     return size_list[v1] > size_list[v2];
                 });
 
-
-////               #pragma omp parallel for
-//                std::for_each( std::execution::par_unseq, img.data(), img.data() + img.size(), [&index_list,N](V& v)
-//                    { v = (std::find(std::next(index_list.begin(),N+1),index_list.end(),v)!=index_list.end()) ? 0 : v;
-//                        if(std::find(std::next(index_list.begin(),N+1),index_list.end(),v)!=index_list.end())
-//                            std::cerr << "Discard " << v << "\n";
-//                    });
-
 #pragma omp parallel for
                 for (auto *ptr = img.data(); ptr != (img.data() + img.size()); ++ptr) {
-//                    if(std::find(std::next(index_list.begin(),N+1),index_list.end(),*(ptr))!=index_list.end())
-//                        std::cerr << "Discard " << *ptr << "\n";
                     *(ptr) = (std::find(std::next(index_list.begin(), N + 1), index_list.end(), *(ptr)) !=
                               index_list.end()) ? 0 : *(ptr);
                 }
@@ -145,104 +135,104 @@ namespace ccpm {
             }
         }
 
-        void to_mlOtsu(int nclasses, const std::string &prefix) {
-//           input_.blur_median(2);
-            float m, M = input_.max_min(m);
-            int nbins = 100;
-            cimg_library::CImg<uint32_t> hist = input_.get_histogram(nbins, m, M), curr_ids(nclasses - 1), thres_ids(
-                    nclasses - 1);
-            cimg_library::CImg<float> zeroth_moment(hist.size()), first_moment(hist.size());
+//        void to_mlOtsu(int nclasses, const std::string &prefix) {
+////           input_.blur_median(2);
+//            float m, M = input_.max_min(m);
+//            int nbins = 100;
+//            cimg_library::CImg<uint32_t> hist = input_.get_histogram(nbins, m, M), curr_ids(nclasses - 1), thres_ids(
+//                    nclasses - 1);
+//            cimg_library::CImg<float> zeroth_moment(hist.size()), first_moment(hist.size());
+//
+//            zeroth_moment(0) = first_moment(0) = hist(0);
+//            for (int i = 1; i < hist.size(); ++i) {
+//                zeroth_moment(i) = zeroth_moment(i - 1) + hist(i);
+//                first_moment(i) = first_moment(i - 1) + i * hist(i);
+//            }
+//
+//            std::function<float(uint32_t i, uint32_t j)> _get_var_btw_classes =
+//                    [&zeroth_moment, &first_moment](uint32_t i, uint32_t j) {
+//                        if (i == 0) {
+//                            if (zeroth_moment(i) > 0)
+//                                return std::pow(first_moment(j), 2) / zeroth_moment(j);
+//                        } else {
+//
+//                            float zeroth_moment_ij = zeroth_moment(j) - zeroth_moment(i - 1);
+//                            if (zeroth_moment_ij > 0) {
+//                                float first_moment_ij = first_moment(j) - first_moment(i - 1);
+//                                return std::pow(first_moment_ij, 2) / zeroth_moment_ij;
+//                            }
+//
+//                        }
+//
+//                        return 0.;
+//                    };// end helper _get_var_btw_classes
+//
+//
+//            std::function<float(int, int, int, int, float &)> _get_thres_idx;
+//            _get_thres_idx = [&_get_var_btw_classes, &_get_thres_idx, &zeroth_moment, &first_moment, &curr_ids, &thres_ids]
+//                    (int hist_idx, int thres_idx, int nbins, int thres_count, float &sigma_max) {
+//                if (thres_idx < thres_count) {
+//                    for (int idx = hist_idx; idx < nbins - thres_count + thres_idx; ++idx) {
+//                        curr_ids(thres_idx) = idx;
+//                        sigma_max = _get_thres_idx(idx + 1, thres_idx + 1,
+//                                                   nbins, thres_count,
+//                                                   sigma_max);
+//                    }
+//
+//                } else {
+//                    float sigma = (_get_var_btw_classes(0, curr_ids(0))) +
+//                                  (_get_var_btw_classes(curr_ids[thres_count - 1] + 1, nbins - 1));
+//
+//                    for (int idx = 0; idx < thres_count - 1; ++idx) {
+//                        sigma += _get_var_btw_classes(curr_ids[idx] + 1, curr_ids[idx + 1]);
+//                    }
+//
+//                    if (sigma > sigma_max) {
+//                        sigma_max = sigma;
+//                        thres_ids = curr_ids;
+//                    }
+//                }
+//
+//                return sigma_max;
+//            };//end of _get_thres_idx helper
+//
+//            float sigma_max = 0.;
+//            _get_thres_idx(0, 0, nbins, nclasses - 1, sigma_max);
+//
+//            // look into thres indices
+//            for (int i = 0; i < nclasses; ++i) {
+//                float min_as_val = (i == 0) ? 0 : (M - m) * (2 * thres_ids(i - 1) + 1) / (float) (2 * nbins),
+//                        max_as_val = (i == nclasses - 1) ? M : (M - m) * (2 * thres_ids(i) + 1) / (float) (2 * nbins);
+//                std::cout << "[" << min_as_val << "-" << max_as_val << "] writing "
+//                          << (prefix + std::to_string(i) + (".tiff")) << std::endl;
+//                cimg_library::CImg<T> img = (input_.get_threshold(min_as_val) &
+//                                             (cimg_library::CImg<T>(input_, false).fill(M) - input_).get_threshold(
+//                                                     M - max_as_val))
+//                        .get_erode(2).get_dilate(2).get_normalize(0, 255);
+//
+//                img.save_tiff((prefix + std::to_string(i) + (".tiff")).c_str());
+//                if (i > 0) { // no need to label solid
+//                    img.label();
+//                    img.save_tiff((prefix + std::to_string(i) + ("_cc.tiff")).c_str());
+//                    for (int j = 0; j < img.max(); ++j) {
+//
+//                        auto copy = (+img);
+//                        int c = 0;
+//                        std::for_each(copy.data(), copy.data() + copy.size(),
+//                                      [&c, j](float &v) { if (v == j) { ++c, v = 1; } else { v = 0; }});
+//                        std::cout << " cc : " << j << " count " << c << std::endl;
+//                        if (c > 15) {
+//                            copy.normalize(0, 255).save_tiff(
+//                                    (prefix + std::to_string(i) + ("_") + std::to_string(j) + ("_cc.tiff")).c_str());
+//                        }
+//
+//                    }
+//                }
+//
+//            }
+//        };
 
-            zeroth_moment(0) = first_moment(0) = hist(0);
-            for (int i = 1; i < hist.size(); ++i) {
-                zeroth_moment(i) = zeroth_moment(i - 1) + hist(i);
-                first_moment(i) = first_moment(i - 1) + i * hist(i);
-            }
-
-            std::function<float(uint32_t i, uint32_t j)> _get_var_btw_classes =
-                    [&zeroth_moment, &first_moment](uint32_t i, uint32_t j) {
-                        if (i == 0) {
-                            if (zeroth_moment(i) > 0)
-                                return std::pow(first_moment(j), 2) / zeroth_moment(j);
-                        } else {
-
-                            float zeroth_moment_ij = zeroth_moment(j) - zeroth_moment(i - 1);
-                            if (zeroth_moment_ij > 0) {
-                                float first_moment_ij = first_moment(j) - first_moment(i - 1);
-                                return std::pow(first_moment_ij, 2) / zeroth_moment_ij;
-                            }
-
-                        }
-
-                        return 0.;
-                    };// end helper _get_var_btw_classes
-
-
-            std::function<float(int, int, int, int, float &)> _get_thres_idx;
-            _get_thres_idx = [&_get_var_btw_classes, &_get_thres_idx, &zeroth_moment, &first_moment, &curr_ids, &thres_ids]
-                    (int hist_idx, int thres_idx, int nbins, int thres_count, float &sigma_max) {
-                if (thres_idx < thres_count) {
-                    for (int idx = hist_idx; idx < nbins - thres_count + thres_idx; ++idx) {
-                        curr_ids(thres_idx) = idx;
-                        sigma_max = _get_thres_idx(idx + 1, thres_idx + 1,
-                                                   nbins, thres_count,
-                                                   sigma_max);
-                    }
-
-                } else {
-                    float sigma = (_get_var_btw_classes(0, curr_ids(0))) +
-                                  (_get_var_btw_classes(curr_ids[thres_count - 1] + 1, nbins - 1));
-
-                    for (int idx = 0; idx < thres_count - 1; ++idx) {
-                        sigma += _get_var_btw_classes(curr_ids[idx] + 1, curr_ids[idx + 1]);
-                    }
-
-                    if (sigma > sigma_max) {
-                        sigma_max = sigma;
-                        thres_ids = curr_ids;
-                    }
-                }
-
-                return sigma_max;
-            };//end of _get_thres_idx helper
-
-            float sigma_max = 0.;
-            _get_thres_idx(0, 0, nbins, nclasses - 1, sigma_max);
-
-            // look into thres indices
-            for (int i = 0; i < nclasses; ++i) {
-                float min_as_val = (i == 0) ? 0 : (M - m) * (2 * thres_ids(i - 1) + 1) / (float) (2 * nbins),
-                        max_as_val = (i == nclasses - 1) ? M : (M - m) * (2 * thres_ids(i) + 1) / (float) (2 * nbins);
-                std::cout << "[" << min_as_val << "-" << max_as_val << "] writing "
-                          << (prefix + std::to_string(i) + (".tiff")) << std::endl;
-                cimg_library::CImg<T> img = (input_.get_threshold(min_as_val) &
-                                             (cimg_library::CImg<T>(input_, false).fill(M) - input_).get_threshold(
-                                                     M - max_as_val))
-                        .get_erode(2).get_dilate(2).get_normalize(0, 255);
-
-                img.save_tiff((prefix + std::to_string(i) + (".tiff")).c_str());
-                if (i > 0) { // no need to label solid
-                    img.label();
-                    img.save_tiff((prefix + std::to_string(i) + ("_cc.tiff")).c_str());
-                    for (int j = 0; j < img.max(); ++j) {
-
-                        auto copy = (+img);
-                        int c = 0;
-                        std::for_each(copy.data(), copy.data() + copy.size(),
-                                      [&c, j](float &v) { if (v == j) { ++c, v = 1; } else { v = 0; }});
-                        std::cout << " cc : " << j << " count " << c << std::endl;
-                        if (c > 15) {
-                            copy.normalize(0, 255).save_tiff(
-                                    (prefix + std::to_string(i) + ("_") + std::to_string(j) + ("_cc.tiff")).c_str());
-                        }
-
-                    }
-                }
-
-            }
-        };
-
-        const cimg_library::CImg <V> &
+        const cimg_library::CImg<V> &
         get_contactSphere(int n, const std::vector<double> &al, const std::vector<double> &rot) {
             assert(rot.size() == al.size() - 1);
             std::string identity;
@@ -300,12 +290,18 @@ namespace ccpm {
             return output_;
         }
 
+        void release(){
+            input_.clear();
+        }
+
     protected:
         ~itf_to_CImg() {};
 
     private:
         cimg_library::CImg <T> input_;
         cimg_library::CImg <V> output_;
+
+        std::ofstream logfile;
         const char *fname_;
         bool processed_;
 
@@ -323,11 +319,11 @@ namespace ccpm {
         //black box function
         void process() {
             if (!processed_) {
-                std::cerr << " input [stats] (white/size)" << input_.get_normalize(0, 1).sum() << " / " << input_.size()
+                logfile << " input [stats] (white/size)" << input_.get_normalize(0, 1).sum() << " / " << input_.size()
                           << std::endl;
                 output_ = input_.get_normalize(0, 255);
 //                output_.blur(1);
-                std::cerr << " output [stats] (white/size)" << output_.sum() << " / " << output_.size() << std::endl;
+                logfile << " output [stats] (white/size)" << output_.sum() << " / " << output_.size() << std::endl;
                 processed_ = true;
             }
         }
