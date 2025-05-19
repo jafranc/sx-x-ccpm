@@ -18,6 +18,8 @@
 #include <iostream>
 #include <numeric>
 #include <execution>
+
+#include "../tpl/loguru/loguru.hpp"
 /***
  * Interface template class which
  *  - input an image (cimg format)
@@ -32,9 +34,9 @@ namespace ccpm {
     class itf_to_CImg {
 
     public:
-        itf_to_CImg() : processed_(false),logfile("/tmp/log.ccpm.cimg") {
+        itf_to_CImg() : processed_(false){
             fname_ = "";
-            logfile << "using itf to CImg template default ctor instantiation \n";
+            LOG_S(INFO) << "using itf to CImg template default ctor instantiation \n";
         }
 
         void set_input(const char *fname) {
@@ -51,7 +53,7 @@ namespace ccpm {
             std::ofstream csv(prefix + ("mapping.csv"));
             csv << "x,y,z,n\n";
             auto grad = input_.get_gradient();
-            logfile << "\n Mapping  info : " << grad.size() << " " << grad.max() << " " << grad.min() << std::endl;
+            LOG_S(INFO) << "\n Mapping  info : " << grad.size() << " " << grad.max() << " " << grad.min() << std::endl;
 
             cimg_forXYZC(input_, x, y, z, c) {
                             const uint64_t pos = input_.offset(x, y, z, c);
@@ -301,7 +303,7 @@ namespace ccpm {
         cimg_library::CImg <T> input_;
         cimg_library::CImg <V> output_;
 
-        std::ofstream logfile;
+//        std::ofstream logfile;
         const char *fname_;
         bool processed_;
 
@@ -319,11 +321,11 @@ namespace ccpm {
         //black box function
         void process() {
             if (!processed_) {
-                logfile << " input [stats] (white/size)" << input_.get_normalize(0, 1).sum() << " / " << input_.size()
+                LOG_S(INFO) << " input [stats] (white/size)" << input_.get_normalize(0, 1).sum() << " / " << input_.size()
                           << std::endl;
                 output_ = input_.get_normalize(0, 255);
 //                output_.blur(1);
-                logfile << " output [stats] (white/size)" << output_.sum() << " / " << output_.size() << std::endl;
+                LOG_S(INFO) << " output [stats] (white/size)" << output_.sum() << " / " << output_.size() << std::endl;
                 processed_ = true;
             }
         }

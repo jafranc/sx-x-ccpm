@@ -12,6 +12,7 @@
 #undef Success
 #endif
 
+
 #include <functional>
 
 #include <CGAL/IO/STL.h>
@@ -61,6 +62,8 @@
 //CC
 #include <boost/graph/connected_components.hpp>
 #include <boost/graph/incremental_components.hpp>
+
+#include "../tpl/loguru/loguru.hpp"
 
 namespace PMP = CGAL::Polygon_mesh_processing;
 
@@ -181,8 +184,7 @@ namespace ccpm {
     public:
 
         itf_to_CGAL() : c2t3_(tr_), processed_sm_(false),
-                        processed_refined_(false), do_refined_(false),
-                        logfile("/tmp/log.ccpm.cgal") {
+                        processed_refined_(false), do_refined_(false){
             fname_ = "";
             //min_edge_length_ = 0.0;
 
@@ -211,7 +213,7 @@ namespace ccpm {
             m_radius_ = radius;
             m_distance_ = distance;
             if (m_distance_ > m_radius_ * m_radius_)
-                std::cout << "[Warning]  Distance has no impact if dist>radius^2 \n";
+                LOG_S(ERROR) << "[Warning]  Distance has no impact if dist>radius^2 \n";
         }
 
         void set_isotropic_ref() {
@@ -250,11 +252,11 @@ namespace ccpm {
 
         const itf_to_CGAL &save_surf_off(const char *fname) {
             process_mesh();
-            logfile << "\t [completed]\n";
+            LOG_S(INFO) << "\t [completed]\n";
             std::ofstream out(fname);
             CGAL::output_surface_facets_to_off(out, c2t3_);
 
-            logfile << "\n Final number of points: " << tr_.number_of_vertices() << "\n";
+            LOG_S(INFO) << "\n Final number of points: " << tr_.number_of_vertices() << "\n";
 
             return *this;
         }
@@ -291,8 +293,10 @@ namespace ccpm {
                     pts.push_back(pd.first);
                 //produce angles
                 build_tree(pts);
+                double integral_constant = get_totalIntegral(gcurv);
+                LOG_S(INFO) << "integral_constant :: " << integral_constant << std::endl;
 
-                logfile << " angle :: label, numel, euler, iv, area \n";
+                LOG_S(INFO) << " angle :: label, numel, euler, iv, area \n";
                 auto vvec = process_triple_contact();
                 for (const auto &[k, v]: vvec.first) {
                     const auto &map = vvec.second[k];//is the set of faces
@@ -301,10 +305,10 @@ namespace ccpm {
                         std::ofstream basicOfstream(
                                 std::string(prefix + "csvfile_" + std::to_string(k) + ".csv").c_str());
                         basicOfstream << " # x, y ,z \n";
-                        logfile << k << ", " << map.size()
+                        LOG_S(INFO) << k << ", " << map.size()
                                 << "," << euler << ", "
-                                << get_angle(map, gcurv, [](double t) {
-                                    return acos((2 * 2 * M_PI - t) / 2. / M_PI - 1.) * 180 / M_PI;
+                                << get_angle(map, gcurv, [integral_constant](double t) {
+                                    return acos((integral_constant - t) / 2. / M_PI - 1.) * 180 / M_PI;
                                 }, basicOfstream) << std::endl;
                     }
 
@@ -327,7 +331,7 @@ namespace ccpm {
                     csvfile << tags_projection(pt) << "," << euler << std::endl;
 
                 }
-                logfile << "Final number of points: " << tr_.number_of_vertices() << "\n";
+                LOG_S(INFO) << "Final number of points: " << tr_.number_of_vertices() << "\n";
             } else
                 throw std::exception();
             return *this;
@@ -337,10 +341,10 @@ namespace ccpm {
             std::ifstream input(fname);
             input >> tmesh_;
 
-            logfile << "Mesh Info : number of vertices " << tmesh_.number_of_vertices() << std::endl;
-            logfile << "Mesh Info : number of edges " << tmesh_.number_of_edges() << std::endl;
-            logfile << "Mesh Info : number of half-edges " << tmesh_.number_of_halfedges() << std::endl;
-            logfile << "Mesh Info : number of faces " << tmesh_.number_of_faces() << std::endl;
+            LOG_S(INFO) << "Mesh Info : number of vertices " << tmesh_.number_of_vertices() << std::endl;
+            LOG_S(INFO) << "Mesh Info : number of edges " << tmesh_.number_of_edges() << std::endl;
+            LOG_S(INFO) << "Mesh Info : number of half-edges " << tmesh_.number_of_halfedges() << std::endl;
+            LOG_S(INFO) << "Mesh Info : number of faces " << tmesh_.number_of_faces() << std::endl;
 
             return *this;
         }
@@ -362,8 +366,6 @@ namespace ccpm {
         //double interpolation
         std::unique_ptr<Tree> ptree_;
         std::unique_ptr<Distance> p_tr_dist_;
-
-        std::ofstream logfile;
 
         typedef boost::component_index<int> Components;
         //double min_edge_length_;
@@ -402,7 +404,7 @@ namespace ccpm {
                                                                    m_distance_);
 
 
-                logfile << "Using parameters:\n \t angle: "
+                LOG_S(INFO) << "Using parameters:\n \t angle: "
                         << m_angle_ << "\n\t radius: "
                         << m_radius_ << "\n\t distance: "
                         << m_distance_ << std::endl;
@@ -456,8 +458,8 @@ namespace ccpm {
             BOOST_FOREACH(vertex_index cd, comp) {
                             numCC = std::max(numCC, cd);
                         }
-            logfile << " number of CC : " << numCC << std::endl;
-            logfile << " max rank : " << *std::max_element(rank.begin(),rank.end()) << " for  parents " <<
+            LOG_S(INFO) << " number of CC : " << numCC << std::endl;
+            LOG_S(INFO) << " max rank : " << *std::max_element(rank.begin(),rank.end()) << " for  parents " <<
             parent[std::distance(rank.begin(),std::max_element(rank.begin(),rank.end()))] << std::endl;
             //stack faces around vertices
 //            BOOST_FOREACH(face_descriptor fd, tmesh_.faces()) {
@@ -607,6 +609,28 @@ namespace ccpm {
         };
 
 
+        double get_totalIntegral(const CurvatureMaps_type &gcurv)
+        {
+            double integrate;
+            BOOST_FOREACH(face_descriptor fd, tmesh_.faces())
+            {
+               auto area = PMP::face_area(fd, tmesh_);
+               auto KG = 0.;
+                auto count = 0;
+                CGAL::Vertex_around_face_iterator<Triangle_mesh> vbegin, vend;
+                for (boost::tie(vbegin, vend) = vertices_around_face(tmesh_.halfedge(fd), tmesh_);
+                     vbegin != vend;
+                     ++vbegin, ++count) {
+                    KG += get(gcurv, *vbegin);
+                }
+
+                KG /= count;
+                integrate += std::fabs(area) * KG;
+            }
+
+           return integrate;
+        }
+
         double get_angle(const std::set<face_descriptor> &cci, const CurvatureMaps_type &gcurv,
                          const std::function<double(double)> &fn, std::ofstream &csvfile) {
             double integrate, total_area;
@@ -632,13 +656,13 @@ namespace ccpm {
 
             }
 
-            logfile << "," << integrate << "," << total_area << std::endl;
+            LOG_S(INFO) << "," << integrate << "," << total_area << std::endl;
             return fn(integrate);
         }
 
         void build_tree(const std::vector<Point> &pts) {
 
-            logfile << "Building neighboring tree\n";
+            LOG_S(INFO) << "Building neighboring tree\n";
             Image_point_property_map ppmap(pts);
             ptree_ = std::make_unique<Tree>(boost::counting_iterator<std::size_t>(0),
                                             boost::counting_iterator<std::size_t>(pts.size()),
@@ -662,7 +686,7 @@ namespace ccpm {
         }
 
         std::pair<CurvatureMaps_type, CurvatureMaps_type> process_curvature() {
-            logfile << " Processing curvature \n";
+            LOG_S(INFO) << " Processing curvature \n";
             CurvatureMaps_type mcurv, gcurv;
             bool created;
 
@@ -700,7 +724,7 @@ namespace ccpm {
                     if (get(eif, e))
                         ++sharp_counter;
 
-                logfile << "\n" << sharp_counter << " sharp edges" << std::endl;
+                LOG_S(INFO)<< "\n" << sharp_counter << " sharp edges" << std::endl;
 
                 int nb_iterations = 30;
                 PMP::angle_and_area_smoothing(tmesh_, CGAL::parameters::number_of_iterations(nb_iterations)
@@ -936,7 +960,8 @@ namespace ccpm {
             zmin = c.zmin() + eps;
             zmax = c.zmax() - eps;
 
-            logfile << " Bounding box " << c << std::endl;
+            LOG_S(INFO) << " Bounding box " << c << std::endl;
+//            logfile << " Bounding box " << c << std::endl;
 
             BOOST_FOREACH(face_descriptor fd, m.faces()) {
                             BOOST_FOREACH(vertex_descriptor vd, vertices_around_face(m.halfedge(fd), m)) {

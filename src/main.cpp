@@ -8,6 +8,9 @@
 #include <cxxopts.hpp>
 #include <boost/filesystem.hpp>
 
+#define LOGURU_WITH_STREAMS 1
+#include "../tpl/loguru/loguru.cpp"
+
 #include "itf_policies.h"
 #include "itf_CImg.h"
 #include "itf_CGAL.h"
@@ -20,7 +23,11 @@ std::tuple<string, string, string> split_name(const string &fname) {
 }
 
 
-int main(int argc, const char **argv) {
+int main(int argc, char **argv) {
+    //loguru
+    loguru::init(argc, argv);
+    loguru::add_file("ccpm.log", loguru::Append, loguru::Verbosity_MAX);
+
     //block options
     cxxopts::Options options("ccpm", "Curvature capture in porous media");
     options.set_width(70)
@@ -74,7 +81,7 @@ int main(int argc, const char **argv) {
         auto ext = std::get<2>(names);
         ccpm::interface<ccpm::itf_to_CGAL> cgal_interface;
         if (ext == "tiff") {
-            std::cout << "image file " << options_parsed["image"].as<std::string>() << std::endl;
+            LOG_S(INFO) << "image file " << options_parsed["image"].as<std::string>() << std::endl;
             cimg_interface.set_input(options_parsed["image"].as<std::string>().c_str());
             //if isoval, we generate label lists and isolate each component and their CC
             if (options_parsed.count("isoval") > 0) {

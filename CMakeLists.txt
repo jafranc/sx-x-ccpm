@@ -245,6 +245,10 @@ if(CGAL_FOUND)
   include_directories(${CGAL_ALL_INCLUDES})
 endif ()
 
+##loguru
+set(LOGURU_DIR ./tpl/loguru/)
+include_directories(${LOGURU_DIR})
+
 find_package(Boost COMPONENTS filesystem REQUIRED)
 include(CGAL_Ceres_support)
 add_executable(${exe} ${ccpm_src})
