@@ -8,7 +8,7 @@
 #ifndef ITF_POLICIES_H_
 #define ITF_POLICIES_H_
 
-namespace ccpm{
+namespace ccpm {
 
     /***
      * CPTR template class to implement interfaces

@@ -245,10 +245,14 @@ if(CGAL_FOUND)
   include_directories(${CGAL_ALL_INCLUDES})
 endif ()
 
+##loguru
+set(LOGURU_DIR ./tpl/loguru/)
+include_directories(${LOGURU_DIR})
+
 find_package(Boost COMPONENTS filesystem REQUIRED)
 include(CGAL_Ceres_support)
 add_executable(${exe} ${ccpm_src})
 target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads Ceres::ceres CGAL::Ceres_support CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
 
 #tests
-#add_subdirectory (tests)
+add_subdirectory (tests)

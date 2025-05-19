@@ -7,3 +7,9 @@
 [submodule "tpl/CImg"]
 	path = tpl/CImg
 	url = https://github.com/dtschump/CImg
+[submodule "loguru"]
+	path = loguru
+	url = https://github.com/emilk/loguru
+[submodule "tpl/loguru"]
+	path = tpl/loguru
+	url = https://github.com/emilk/loguru

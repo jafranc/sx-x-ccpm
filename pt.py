@@ -1,5 +1,3 @@
-from ctypes.wintypes import tagMSG
-
 import vtk
 import pyvista as pv
 import numpy as np
@@ -99,12 +97,6 @@ if __name__ == "__main__":
         tag.SetName("boundary")
         grid.GetPointData().AddArray(tag)
         #
-        meanC = dsa.numpyTovtkDataArray(.5 * (u[:, -5] * u[:, -6]))
-        meanC.SetName("meanCurvature")
-        grid.GetPointData().AddArray(meanC)
-        gaussianC = dsa.numpyTovtkDataArray(u[:, -5] * u[:, -6])
-        gaussianC.SetName("gaussianCurvature")
-        grid.GetPointData().AddArray(gaussianC)
         mC = dsa.numpyTovtkDataArray(u[:, -4])
         mC.SetName("mc")
         grid.GetPointData().AddArray(mC)
@@ -124,7 +116,6 @@ if __name__ == "__main__":
         w.SetFileName(args.filename[0].split('.')[0] + '_pt.vtu')
         w.Update()
         w.Write()
-        # w = vtk.vtkXMLPolyDataWriter()
 
         qual = vtk.vtkMeshQuality()
         qual.SetInputData(p2c.GetOutput())
@@ -162,8 +153,7 @@ if __name__ == "__main__":
         area = dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray(5))
 
         print(
-            f"global angle : {2 * euler * np.pi} : {np.sum(garea * dsa.numpy_support.vtk_to_numpy(p2c.GetOutput().GetCellData().GetArray('gc')))} : "
-            f"{np.sum(garea * (dsa.numpy_support.vtk_to_numpy(p2c.GetOutput().GetCellData().GetArray('gaussianCurvature')) + 0. * dsa.numpy_support.vtk_to_numpy(p2c.GetOutput().GetCellData().GetArray('meanCurvature'))))}")
+            f"global angle : {2 * euler * np.pi} : {np.sum(garea * dsa.numpy_support.vtk_to_numpy(p2c.GetOutput().GetCellData().GetArray('gc')))} ")
         print(f"number of faces {p2c.GetOutput().GetNumberOfCells()}")
 
         number_of_valid = 0
@@ -174,14 +164,10 @@ if __name__ == "__main__":
             if (region[region == i].shape[0] > 25):
                 number_of_valid += 1
 
-                print(
-                    f"{i} : number of elements {np.sum(region == i)} for a global area of {np.sum(area[region == i])}")
-                print(
-                    f"{i} : ring value : {(f1 := np.sum(area[region == i] * dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gc'))[region == i]))} : "
-                    f"{(f2 := np.sum(area[region == i] * (dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gaussianCurvature'))[region == i] + dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('meanCurvature'))[region == i])))}")
-                print(f"{i} : formula : {formula(f1,euler)} : {formula(f2,euler)}")
-                print(f"{i} : formula_2 : {formula_2(f1,euler)} : {formula_2(f2,euler)}")
-                # print(f"\n {i} : formula_3 : {formula_3(f1*.9, .9*2*np.pi)} ")
+                print(f"{i} : number of elements {np.sum(region==i)} for a global area of {np.sum(area[region==i])}")
+                print(f"{i} : ring value : { (f1:=np.sum(area[region == i]*dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gc'))[region == i])) } : "
+                      f"{ (f2:=np.sum(area[region==i]*( dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gaussianCurvature'))[region == i] + dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('meanCurvature'))[region == i]))) }")
+                print(f"{i} : formula : {formula(f1)} : {formula(f2)}")
 
                 # print(f"formula from geometry")
                 # cc = (vtk.vtkCellCenters())
@@ -203,9 +189,8 @@ if __name__ == "__main__":
                 # print(f"ring value (p={p}) : {f1p} : {f2p} ")
                 # print(f"formula (p={p}) ): {formula(f1p, np.pi, +3/2*np.pi)} : {formula(f2p,np.pi,0)}")
 
-                # np.arccos(((4*np.pi - 0.88 )/2/np.pi-1)) * 180/np.pi        p
+                #np.arccos(((4*np.pi - 0.88 )/2/np.pi-1)) * 180/np.pi        p
 
-        print(
-            f"A : ring value : {(f1 := np.sum(area * dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gc'))) / number_of_valid)} : "
-            f"{(f2 := np.sum(area * (dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gaussianCurvature')) + dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('meanCurvature')))) / number_of_valid)}")
+        print(f"A : ring value : { (f1:=np.sum(area*dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gc')))/number_of_valid) } : "
+        f"{ (f2:=np.sum(area*( dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('gaussianCurvature')) + dsa.numpy_support.vtk_to_numpy(conn.GetOutput().GetCellData().GetArray('meanCurvature'))))/number_of_valid) }")
         print(f"A : formula : {formula(f1)} : {formula(f2)}")
