@@ -41,7 +41,6 @@ if(TIFF_FOUND)
   include_directories(${TIFF_INCLUDE_DIR})
 else()
   message(STATUS "These programs require the TIFF library, and will not be compiled.")
-  #   message(STATUS "These programs require the X11 library, and will not be compiled.")
 endif()
 
 
@@ -52,7 +51,6 @@ find_package(OpenMP)
 
 
 # cgal
-find_package(Ceres REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 if(Eigen3_FOUND)
   include_directories(${EIGEN3_INCLUDE_DIRS})
@@ -262,12 +260,8 @@ set(LOGURU_DIR ./tpl/loguru/)
 include_directories(${LOGURU_DIR})
 
 find_package(Boost COMPONENTS filesystem REQUIRED)
-#include(CGAL_Ceres_support)
 add_executable(${exe} ${ccpm_src})
 target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
-
-#tests
-#add_subdirectory (tests)
 
 #tests
 add_subdirectory (./unit_test)
