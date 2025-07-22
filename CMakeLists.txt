@@ -1,4 +1,5 @@
-cmake_minimum_required (VERSION 2.8.12)
+cmake_minimum_required (VERSION 2.8.12...3.10)
+
 project(ccpm)
 
 set(exe "ccpm")
@@ -10,14 +11,25 @@ set(include "./include")
 set(ccpm_include
         include/ )
 
+#gtest
+include(FetchContent)
+FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+
+
+## For Windows: Prevent overriding the parent project's compiler/linker settings
+#set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
 include_directories(${include})
 
 set( ccpm_src
     src/main.cpp )
 
 find_package(OpenMP REQUIRED)
-
-find_package( Threads REQUIRED )
+find_package(Threads REQUIRED)
 # CImg for stl import
 set(CIMG_DIR ./tpl/CImg)
 include_directories(${CIMG_DIR})
@@ -250,9 +262,12 @@ set(LOGURU_DIR ./tpl/loguru/)
 include_directories(${LOGURU_DIR})
 
 find_package(Boost COMPONENTS filesystem REQUIRED)
-include(CGAL_Ceres_support)
+#include(CGAL_Ceres_support)
 add_executable(${exe} ${ccpm_src})
-target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads Ceres::ceres CGAL::Ceres_support CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
+target_link_libraries(${exe}  ${TIFF_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX Threads::Threads CGAL::CGAL ${Boost_FILESYSTEM_LIBRARY})
 
 #tests
-add_subdirectory (tests)
+#add_subdirectory (tests)
+
+#tests
+add_subdirectory (./unit_test)

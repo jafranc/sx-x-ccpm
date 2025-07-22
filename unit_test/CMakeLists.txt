@@ -1,0 +1,10 @@
+enable_testing()
+add_executable(Test_Cimg test_cimg.cpp)
+target_link_libraries(Test_Cimg Threads::Threads ${TIFF_LIBRARIES} GTest::gtest_main)
+add_executable(Test_CGAL test_cgal.cpp)
+find_package(Boost COMPONENTS filesystem REQUIRED)
+target_link_libraries(Test_CGAL Threads::Threads CGAL::CGAL GTest::gtest_main ${Boost_FILESYSTEM_LIBRARY})
+
+include(GoogleTest)
+gtest_discover_tests(Test_Cimg)
+gtest_discover_tests(Test_CGAL)
