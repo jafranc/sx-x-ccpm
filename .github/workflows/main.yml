@@ -98,16 +98,16 @@ jobs:
       - name: Install test dependencies
         run: apt update && apt install -y cmake libtiff5-dev libboost-filesystem-dev
 
-      - name: Verify permissions of test binaries (for debugging)
+      - name: Change permissions of test binaries (for debugging)
         run: |
-          ls -l build/Test_CGAL
-          ls -l build/Test_Cimg
+          chmod +x build/Test_CGAL
+          chmod +x build/Test_Cimg
         working-directory: ${{ github.workspace }}
 
       - name: Run Cimg and CGAL unit tests
         run: |
           mkdir -p /opt/output # Recreate this directory if needed, or adjust path
           cd unit_test/
-          ./build/Test_Cimg --gtest_filter="*" --gtest_color=no
-          ./build/Test_CGAL --gtest_filter="*" --gtest_color=no
+          ../build/Test_Cimg --gtest_filter="*" --gtest_color=no
+          ../build/Test_CGAL --gtest_filter="*" --gtest_color=no
         working-directory: ${{ github.workspace }} # Ensure commands run from root
