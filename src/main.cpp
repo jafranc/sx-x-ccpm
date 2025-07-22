@@ -18,7 +18,6 @@
  * created by: jacquesn7 (jacquesn7@gmail.com)
  *
  */
-#ifnde
 #include <iostream>
 //argparser
 #include <cxxopts.hpp>

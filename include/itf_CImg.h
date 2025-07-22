@@ -18,7 +18,6 @@
  * created by: jacquesn7 (jacquesn7@gmail.com)
  *
  */
-#ifnde
 #ifndef ITF_CIMG_H_
 #define ITF_CIMG_H_
 
