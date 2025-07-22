@@ -50,8 +50,8 @@ pages:
   artifacts:
       paths:
         - public
-#  only:
-#    - main
+  only:
+   - main
 
 unit-test-job:   # This job runs in the test stage.
   image: jafranc/smarten-u22
