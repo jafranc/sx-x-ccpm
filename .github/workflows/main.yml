@@ -17,22 +17,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4 # Action to checkout your repository code
+        with:
+          submodules: 'true'
 
-      - name: Update apt and install uncrustify
+      - name: Uncrustify
         run: |
           apt update -y
           apt install -y uncrustify
-
-      - name: Format C++ source files with uncrustify
-        run: |
           cd src/ && uncrustify -c ../uncrustify.cfg --no-backup --replace *.cpp
           cd ../include && uncrustify -c ../uncrustify.cfg --no-backup --replace *.h
 
-      - name: Initialize Git submodules
-        run: git submodule update --init
-
       - name: Install build dependencies
-        run: apt -y install libceres-dev libboost-all-dev
+        run: apt -y install libboost-all-dev
 
       - name: Apply CGAL patch
         run: |
