@@ -1,0 +1,111 @@
+name: CI/CD Pipeline for CCPM
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # --- Build Job ---
+  build:
+    name: Build Project
+    runs-on: ubuntu-22.04 # GitHub provides runners, ubuntu-22.04 maps to your smarten-u22 base
+    container: jafranc/smarten-u22 # Use your custom Docker image
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 # Action to checkout your repository code
+
+      - name: Update apt and install uncrustify
+        run: |
+          apt update -y
+          apt install -y uncrustify
+
+      - name: Format C++ source files with uncrustify
+        run: |
+          cd src/ && uncrustify -c ../uncrustify.cfg --no-backup --replace *.cpp
+          cd ../include && uncrustify -c ../uncrustify.cfg --no-backup --replace *.h
+
+      - name: Initialize Git submodules
+        run: git submodule update --init
+
+      - name: Install build dependencies
+        run: apt -y install libceres-dev libboost-all-dev
+
+      - name: Apply CGAL patch
+        run: |
+          cd tpl/cgal
+          git apply ../../cgal.patch
+
+      - name: Configure and build project with Ninja
+        run: |
+          mkdir -p build
+          cd build
+          cmake -G Ninja ..
+          ninja -j 4
+          ninja -j 4 Test_CGAL Test_Cimg # Assuming these are part of the main build process
+        working-directory: ${{ github.workspace }} # Ensure commands run from root
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/ # Upload the entire build directory
+
+  # --- Documentation Pages Job ---
+  pages:
+    name: Build Documentation Pages
+    runs-on: ubuntu-latest # A general Ubuntu runner for Sphinx
+    container: sphinxdoc/sphinx # Use the Sphinx Docker image
+    needs: build # This job runs after the 'build' job completes
+    if: github.ref == 'refs/heads/main' # Equivalent to GitLab's 'only: - main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: pip3 install -q pandas numpy matplotlib datetime dateutils
+
+      - name: Build Sphinx documentation
+        run: |
+          cd sphinx && make html && cd ..
+
+      - name: Prepare public directory for GitHub Pages
+        run: |
+          mkdir .public
+          cp -r sphinx/build/html/* .public/
+          mv .public public
+
+      - name: Upload documentation artifacts for GitHub Pages
+        uses: actions/upload-pages-artifact@v3 # Dedicated action for GitHub Pages
+        with:
+          path: public
+
+  # --- Unit Test Job ---
+  unit-test:
+    name: Run Unit Tests
+    runs-on: ubuntu-22.04
+    container: jafranc/smarten-u22
+    needs: build # This job depends on the 'build' job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/ # Download artifacts to the 'build' directory
+
+      - name: Install test dependencies
+        run: apt update && apt install -y cmake libtiff5-dev libboost-filesystem-dev
+
+      - name: Run Cimg and CGAL unit tests
+        run: |
+          mkdir -p /opt/output # Recreate this directory if needed, or adjust path
+          cd unit_test/
+          ../build/Test_Cimg --gtest_filter="*" --gtest_color=no
+          ../build/Test_CGAL --gtest_filter="*" --gtest_color=no
+        working-directory: ${{ github.workspace }} # Ensure commands run from root
