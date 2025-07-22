@@ -1,0 +1,13 @@
+diff --git a/BGL/include/CGAL/boost/graph/IO/STL.h b/BGL/include/CGAL/boost/graph/IO/STL.h
+index e52a0099557..9796b462917 100644
+--- a/BGL/include/CGAL/boost/graph/IO/STL.h
++++ b/BGL/include/CGAL/boost/graph/IO/STL.h
+@@ -264,7 +264,7 @@ bool write_STL(std::ostream& os,
+ 
+   set_stream_precision_from_NP(os, np);
+ 
+-  if(get_mode(os) == BINARY)
++  if(get_mode(os) == BINARY || true )
+   {
+     os << "FileType: Binary                                                                ";
+     const std::uint32_t N32 = static_cast<std::uint32_t>(faces(g).size());
