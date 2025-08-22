@@ -12,6 +12,7 @@ It requires *Eigen3*, *Boost* and *libtiff* to be installed on the system.
 	cd sx-x-ccpm
 	git submodule init 
 	git submodule update
+	git apply cgal.patch
 	mkdir build-debug && cd build-debug/
 	cmake ..
 	make [-j nprocs]
